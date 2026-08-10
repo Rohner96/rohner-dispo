@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   View,
+  Image,
   useWindowDimensions,
 } from 'react-native';
 
@@ -354,7 +355,13 @@ function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
   return (
     <View style={styles.loginPage}>
       <View style={styles.loginCard}>
-        <Text style={styles.brand}>rohner ag</Text>
+        <Image
+          source={require('./assets/rohner-logo.png')}
+          style={styles.loginLogo}
+          resizeMode="contain"
+          accessibilityLabel="Rohner AG Transporte"
+        />
+        <Text style={styles.loginAppName}>Kommunikationsapp</Text>
         <Text style={styles.loginTitle}>Anmelden</Text>
         <Text style={styles.loginSub}>Transportaufträge und Fuhrrapporte</Text>
 
@@ -567,9 +574,16 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <View style={[styles.container, { maxWidth }]}>
           <View style={styles.header}>
-            <View>
-              <Text style={styles.brand}>rohner ag</Text>
-              <Text style={styles.brandSub}>Transporte · Disposition</Text>
+            <View style={styles.headerBrand}>
+              <View style={styles.headerLogoSurface}>
+                <Image
+                  source={require('./assets/rohner-logo.png')}
+                  style={styles.headerLogo}
+                  resizeMode="contain"
+                  accessibilityLabel="Rohner AG Transporte"
+                />
+              </View>
+              <Text style={styles.brandSub}>Kommunikationsapp</Text>
             </View>
             <View style={styles.accountRow}>
               <View>
@@ -633,8 +647,10 @@ const styles = StyleSheet.create({
   page: { flexGrow: 1, alignItems: 'center', backgroundColor: '#F4F7F4' },
   container: { width: '100%' },
   header: { backgroundColor: '#0B4D27', paddingHorizontal: 24, paddingTop: 28, paddingBottom: 22, gap: 20 },
-  brand: { color: '#FFD11A', fontSize: 30, fontWeight: '900', fontStyle: 'italic' },
   brandSub: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  headerBrand: { width: '100%', maxWidth: 340 },
+  headerLogoSurface: { backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
+  headerLogo: { width: '100%', height: 58 },
   accountRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   accountName: { color: '#FFFFFF', fontWeight: '800' },
   accountRole: { color: '#BBD7C3', marginTop: 2, fontSize: 12 },
@@ -698,6 +714,8 @@ const styles = StyleSheet.create({
   infoBox: { color: '#34443A', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginBottom: 12, lineHeight: 20 },
   loginPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B4D27', padding: 20 },
   loginCard: { width: '100%', maxWidth: 440, backgroundColor: '#F4F7F4', borderRadius: 18, padding: 24 },
+  loginLogo: { width: '100%', height: 78 },
+  loginAppName: { color: '#0B4D27', textAlign: 'center', fontSize: 16, fontWeight: '800', marginTop: 8 },
   loginTitle: { color: '#142018', fontSize: 28, fontWeight: '900', marginTop: 18 },
   loginSub: { color: '#607066', marginTop: 4, marginBottom: 8 },
   loginButton: { backgroundColor: '#0B4D27', borderRadius: 11, padding: 15, alignItems: 'center', marginTop: 18 },
