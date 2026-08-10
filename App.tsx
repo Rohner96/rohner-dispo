@@ -15,20 +15,26 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { absences, drivers, initialOrders, initialRepairCases, projects, trailers, vehicles } from './src/data/demoData';
+import { absences, customers as initialCustomers, drivers as initialDrivers, initialOrders, initialRepairCases, projects, trailers as initialTrailers, vehicles as initialVehicles } from './src/data/demoData';
 import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
+  Customer,
+  Driver,
   OrderType,
   RepairCase,
   RepairCategory,
   RepairPriority,
   RepairStatus,
+  Trailer,
   TransportOrder,
+  Vehicle,
 } from './src/domain/models';
+import { MasterDataView } from './src/components/MasterDataView';
 import { buildBillingPool, formatChf } from './src/lib/billing';
 import { isWorkflowFinished, nextWorkflowAction, nextWorkflowStep, workflowLabels } from './src/lib/workflow';
 import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
+import { activeOnly } from './src/lib/masterData';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
 
@@ -92,11 +98,43 @@ function ChoiceRow<T extends string>({
   );
 }
 
-function OrderCard({ order, compact = false }: { order: TransportOrder; compact?: boolean }) {
-  const project = lookup(projects, order.projectId);
-  const driver = lookup(drivers, order.driverId);
-  const vehicle = lookup(vehicles, order.vehicleId);
-  const trailer = lookup(trailers, order.trailerId);
+function Dropdown({
+  options,
+  selected,
+  onSelect,
+  placeholder = 'Auswählen',
+}: {
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabel = options.find((option) => option.value === selected)?.label;
+  return (
+    <View style={styles.dropdownWrap}>
+      <Pressable style={styles.dropdownButton} onPress={() => setOpen((value) => !value)}>
+        <Text style={[styles.dropdownText, !selectedLabel && styles.dropdownPlaceholder]}>{selectedLabel ?? placeholder}</Text>
+        <Text style={styles.dropdownArrow}>{open ? '▲' : '▼'}</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.dropdownMenu}>
+          {options.map((option) => (
+            <Pressable key={option.value} style={[styles.dropdownOption, option.value === selected && styles.dropdownOptionActive]} onPress={() => { onSelect(option.value); setOpen(false); }}>
+              <Text style={[styles.dropdownOptionText, option.value === selected && styles.dropdownOptionTextActive]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false }: { order: TransportOrder; projectsData: typeof projects; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean }) {
+  const project = lookup(projectsData, order.projectId);
+  const driver = lookup(driversData, order.driverId);
+  const vehicle = lookup(vehiclesData, order.vehicleId);
+  const trailer = lookup(trailersData, order.trailerId);
 
   return (
     <View style={[styles.card, { borderLeftColor: typeColors[order.type] }]}>
@@ -136,10 +174,18 @@ const weekDays = [
 function DispositionView({
   orders,
   repairs,
+  projectsData,
+  driversData,
+  vehiclesData,
+  trailersData,
   onNewOrder,
 }: {
   orders: TransportOrder[];
   repairs: RepairCase[];
+  projectsData: typeof projects;
+  driversData: Driver[];
+  vehiclesData: Vehicle[];
+  trailersData: Trailer[];
   onNewOrder: () => void;
 }) {
   const [calendarMode, setCalendarMode] = useState<'week' | 'list'>('week');
@@ -176,8 +222,8 @@ function DispositionView({
                 <View key={day.date} style={styles.weekColumn}>
                   <Text style={styles.weekDay}>{day.label}</Text>
                   {dayOrders.map((order) => {
-                    const driver = lookup(drivers, order.driverId);
-                    const project = lookup(projects, order.projectId);
+                    const driver = lookup(driversData, order.driverId);
+                    const project = lookup(projectsData, order.projectId);
                     return (
                       <View key={order.id} style={[styles.calendarOrder, { borderLeftColor: typeColors[order.type] }]}>
                         <Text style={styles.calendarTime}>{order.timeWindow}</Text>
@@ -187,7 +233,7 @@ function DispositionView({
                     );
                   })}
                   {dayAbsences.map((absence) => {
-                    const driver = lookup(drivers, absence.driverId);
+                    const driver = lookup(driversData, absence.driverId);
                     return (
                       <View key={`${absence.id}-${day.date}`} style={styles.calendarAbsence}>
                         <Text style={styles.calendarTitle}>{driver?.name}</Text>
@@ -196,7 +242,7 @@ function DispositionView({
                     );
                   })}
                   {dayRepairs.map((repair) => {
-                    const vehicle = lookup(vehicles, repair.vehicleId);
+                    const vehicle = lookup(vehiclesData, repair.vehicleId);
                     return (
                       <View key={`${repair.id}-${day.date}`} style={styles.calendarRepair}>
                         <Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text>
@@ -218,7 +264,7 @@ function DispositionView({
           <View key={date} style={styles.dayBlock}>
             <Text style={styles.dayTitle}>{date}</Text>
             {orders.filter((order) => order.date === date).map((order) => (
-              <OrderCard key={order.id} order={order} compact />
+              <OrderCard key={order.id} order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} compact />
             ))}
           </View>
         ))
@@ -228,13 +274,29 @@ function DispositionView({
 }
 
 function OrderForm({
+  customersData,
+  projectsData,
+  driversData,
+  vehiclesData,
+  trailersData,
   onSave,
   onCancel,
 }: {
+  customersData: Customer[];
+  projectsData: typeof projects;
+  driversData: Driver[];
+  vehiclesData: Vehicle[];
+  trailersData: Trailer[];
   onSave: (order: TransportOrder) => void;
   onCancel: () => void;
 }) {
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
+  const activeCustomers = activeOnly(customersData);
+  const activeDrivers = activeOnly(driversData);
+  const activeVehicles = activeOnly(vehiclesData);
+  const activeTrailers = activeOnly(trailersData);
+  const [customerId, setCustomerId] = useState(activeCustomers[0]?.id ?? '');
+  const matchingProjects = projectsData.filter((project) => project.customerId === customerId);
+  const [projectId, setProjectId] = useState(matchingProjects[0]?.id ?? '');
   const [type, setType] = useState<OrderType>('kipper');
   const [billingMode, setBillingMode] = useState<BillingMode>('stunde');
   const [date, setDate] = useState('2026-08-13');
@@ -243,8 +305,8 @@ function OrderForm({
   const [pickup, setPickup] = useState('Abholort');
   const [delivery, setDelivery] = useState('Abladeort');
   const [description, setDescription] = useState('Bemerkungen zum Auftrag');
-  const [driverId, setDriverId] = useState(drivers[0]?.id ?? '');
-  const [vehicleId, setVehicleId] = useState(vehicles[0]?.id ?? '');
+  const [driverId, setDriverId] = useState(activeDrivers[0]?.id ?? '');
+  const [vehicleId, setVehicleId] = useState(activeVehicles[0]?.id ?? '');
   const [trailerId, setTrailerId] = useState('none');
 
   function save() {
@@ -275,14 +337,23 @@ function OrderForm({
       <Text style={styles.eyebrow}>NEUER TRANSPORTAUFTRAG</Text>
       <Text style={styles.heading}>Auftrag erfassen</Text>
 
-      <Text style={styles.fieldLabel}>Kunde und Projekt</Text>
-      <ChoiceRow
-        options={projects.map((project) => ({
-          value: project.id,
-          label: `${project.customerName} · ${project.name}`,
-        }))}
+      <Text style={styles.fieldLabel}>Kunde</Text>
+      <Dropdown
+        options={activeCustomers.map((customer) => ({ value: customer.id, label: `${customer.customerNumber} · ${customer.name}` }))}
+        selected={customerId}
+        onSelect={(value) => {
+          setCustomerId(value);
+          setProjectId(projectsData.find((project) => project.customerId === value)?.id ?? '');
+        }}
+        placeholder="Kunde auswählen"
+      />
+
+      <Text style={styles.fieldLabel}>Projekt</Text>
+      <Dropdown
+        options={matchingProjects.map((project) => ({ value: project.id, label: `${project.projectNumber ? `${project.projectNumber} · ` : ''}${project.name}` }))}
         selected={projectId}
         onSelect={setProjectId}
+        placeholder="Projekt auswählen"
       />
 
       <Text style={styles.fieldLabel}>Transportart</Text>
@@ -327,15 +398,15 @@ function OrderForm({
       />
 
       <Text style={styles.fieldLabel}>Chauffeur</Text>
-      <ChoiceRow
-        options={drivers.map((driver) => ({ value: driver.id, label: driver.name }))}
+      <Dropdown
+        options={activeDrivers.map((driver) => ({ value: driver.id, label: `${driver.personnelNumber ? `${driver.personnelNumber} · ` : ''}${driver.name}` }))}
         selected={driverId}
         onSelect={setDriverId}
       />
 
       <Text style={styles.fieldLabel}>LKW</Text>
-      <ChoiceRow
-        options={vehicles.map((vehicle) => ({
+      <Dropdown
+        options={activeVehicles.map((vehicle) => ({
           value: vehicle.id,
           label: `${vehicle.internalNumber} · ${vehicle.label}`,
         }))}
@@ -344,10 +415,10 @@ function OrderForm({
       />
 
       <Text style={styles.fieldLabel}>Anhänger / Auflieger</Text>
-      <ChoiceRow
+      <Dropdown
         options={[
           { value: 'none', label: 'Ohne Anhänger' },
-          ...trailers.map((trailer) => ({
+          ...activeTrailers.map((trailer) => ({
             value: trailer.id,
             label: `${trailer.internalNumber} · ${trailer.label}`,
           })),
@@ -381,10 +452,18 @@ function OrderForm({
 function DriverView({
   orders,
   user,
+  projectsData,
+  driversData,
+  vehiclesData,
+  trailersData,
   onAdvance,
 }: {
   orders: TransportOrder[];
   user: AppUser;
+  projectsData: typeof projects;
+  driversData: Driver[];
+  vehiclesData: Vehicle[];
+  trailersData: Trailer[];
   onAdvance: (id: string) => void;
 }) {
   const assigned = orders.filter((order) => (
@@ -397,7 +476,7 @@ function DriverView({
       <Text style={styles.heading}>Meine Touren</Text>
       {assigned.map((order) => (
         <View key={order.id}>
-          <OrderCard order={order} />
+          <OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} />
           <View style={styles.driverActions}>
             <Pressable
               style={styles.mapButton}
@@ -444,8 +523,8 @@ const repairPriorityLabels: Record<RepairPriority, string> = {
   fahrzeug_stilllegen: 'Fahrzeug nicht weiterfahren',
 };
 
-function RepairCard({ repair, showReporter = false }: { repair: RepairCase; showReporter?: boolean }) {
-  const vehicle = lookup(vehicles, repair.vehicleId);
+function RepairCard({ repair, vehiclesData, showReporter = false }: { repair: RepairCase; vehiclesData: Vehicle[]; showReporter?: boolean }) {
+  const vehicle = lookup(vehiclesData, repair.vehicleId);
   return (
     <View style={styles.repairCard}>
       <View style={styles.cardTopline}>
@@ -477,13 +556,16 @@ function RepairCard({ repair, showReporter = false }: { repair: RepairCase; show
 function EmployeeRepairsView({
   repairs,
   user,
+  vehiclesData,
   onReport,
 }: {
   repairs: RepairCase[];
   user: AppUser;
+  vehiclesData: Vehicle[];
   onReport: (repair: RepairCase) => void;
 }) {
-  const [vehicleId, setVehicleId] = useState(vehicles[0]?.id ?? '');
+  const activeVehicles = activeOnly(vehiclesData);
+  const [vehicleId, setVehicleId] = useState(activeVehicles[0]?.id ?? '');
   const [category, setCategory] = useState<RepairCategory>('technischer_defekt');
   const [priority, setPriority] = useState<RepairPriority>('normal');
   const [title, setTitle] = useState('');
@@ -543,7 +625,7 @@ function EmployeeRepairsView({
 
       <Text style={styles.fieldLabel}>Betroffener LKW</Text>
       <ChoiceRow
-        options={vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.internalNumber} · ${vehicle.label}` }))}
+        options={activeVehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.internalNumber} · ${vehicle.label}` }))}
         selected={vehicleId}
         onSelect={setVehicleId}
       />
@@ -584,7 +666,7 @@ function EmployeeRepairsView({
       </Pressable>
 
       <Text style={styles.listHeading}>Meine offenen Meldungen</Text>
-      {ownActiveRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} />)}
+      {ownActiveRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} vehiclesData={vehiclesData} />)}
       {ownActiveRepairs.length === 0 && <Text style={styles.empty}>Du hast keine offenen Reparaturfälle.</Text>}
     </View>
   );
@@ -592,9 +674,11 @@ function EmployeeRepairsView({
 
 function AdminRepairCard({
   repair,
+  vehiclesData,
   onUpdate,
 }: {
   repair: RepairCase;
+  vehiclesData: Vehicle[];
   onUpdate: (id: string, status: RepairStatus, details?: Partial<RepairCase>) => void;
 }) {
   const [workshopName, setWorkshopName] = useState(repair.workshopName ?? '');
@@ -604,7 +688,7 @@ function AdminRepairCard({
 
   return (
     <View style={styles.adminRepairBlock}>
-      <RepairCard repair={repair} showReporter />
+      <RepairCard repair={repair} vehiclesData={vehiclesData} showReporter />
       {repair.status === 'gemeldet' ? (
         <View style={styles.repairAdminPanel}>
           <Text style={styles.listTitle}>Werkstatttermin organisieren</Text>
@@ -644,9 +728,11 @@ function AdminRepairCard({
 
 function AdminRepairsView({
   repairs,
+  vehiclesData,
   onUpdate,
 }: {
   repairs: RepairCase[];
+  vehiclesData: Vehicle[];
   onUpdate: (id: string, status: RepairStatus, details?: Partial<RepairCase>) => void;
 }) {
   const openRepairs = repairs.filter((repair) => repair.status !== 'erledigt');
@@ -656,12 +742,12 @@ function AdminRepairsView({
       <Text style={styles.eyebrow}>FAHRZEUGE & WERKSTATT</Text>
       <Text style={styles.heading}>Reparaturfälle</Text>
       <Text style={styles.infoBox}>Neue Meldungen werden nach Dringlichkeit angezeigt. Nur Administratoren können Werkstatttermine und Status ändern.</Text>
-      {openRepairs.map((repair) => <AdminRepairCard key={repair.id} repair={repair} onUpdate={onUpdate} />)}
+      {openRepairs.map((repair) => <AdminRepairCard key={repair.id} repair={repair} vehiclesData={vehiclesData} onUpdate={onUpdate} />)}
       {openRepairs.length === 0 && <Text style={styles.empty}>Keine offenen Reparaturfälle.</Text>}
       {finishedRepairs.length > 0 ? (
         <>
           <Text style={styles.listHeading}>Erledigt</Text>
-          {finishedRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} showReporter />)}
+          {finishedRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} vehiclesData={vehiclesData} showReporter />)}
         </>
       ) : null}
     </View>
@@ -736,12 +822,14 @@ function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
 
 function OfficeView({
   orders,
+  projectsData,
   onRelease,
 }: {
   orders: TransportOrder[];
+  projectsData: typeof projects;
   onRelease: (id: string) => void;
 }) {
-  const candidates = buildBillingPool(orders, projects);
+  const candidates = buildBillingPool(orders, projectsData);
   const awaitingRelease = orders.filter((order) => order.status === 'abgeschlossen');
 
   return (
@@ -749,7 +837,7 @@ function OfficeView({
       <Text style={styles.eyebrow}>KONTROLLE & VERRECHNUNG</Text>
       <Text style={styles.heading}>Freigabe durch Administration</Text>
       {awaitingRelease.map((order) => {
-        const project = lookup(projects, order.projectId);
+        const project = lookup(projectsData, order.projectId);
         return (
           <View key={order.id} style={styles.billingRow}>
             <View style={styles.billingMain}>
@@ -785,69 +873,7 @@ function OfficeView({
   );
 }
 
-function MasterDataView() {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.eyebrow}>GRUNDLAGEN</Text>
-      <Text style={styles.heading}>Stammdaten</Text>
-
-      <Text style={styles.listHeading}>Chauffeure</Text>
-      {drivers.map((driver) => (
-        <View key={driver.id} style={styles.listRow}>
-          <Text style={styles.listTitle}>{driver.name}</Text>
-          <Text style={styles.activeLabel}>Aktiv</Text>
-        </View>
-      ))}
-
-      <Text style={styles.listHeading}>LKW</Text>
-      {vehicles.map((vehicle) => (
-        <View key={vehicle.id} style={styles.listRow}>
-          <View>
-            <Text style={styles.listTitle}>{vehicle.internalNumber}</Text>
-            <Text style={styles.muted}>{vehicle.label}</Text>
-          </View>
-          <Text style={styles.activeLabel}>Aktiv</Text>
-        </View>
-      ))}
-
-      <Text style={styles.listHeading}>Anhänger und Auflieger</Text>
-      {trailers.map((trailer) => (
-        <View key={trailer.id} style={styles.listRow}>
-          <View>
-            <Text style={styles.listTitle}>{trailer.internalNumber}</Text>
-            <Text style={styles.muted}>{trailer.label}</Text>
-          </View>
-          <Text style={styles.activeLabel}>Aktiv</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function UserManagementView() {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.eyebrow}>ADMINISTRATION</Text>
-      <Text style={styles.heading}>Benutzer und Rechte</Text>
-      <Text style={styles.infoBox}>
-        Diese Konten sind vorläufige Testzugänge. Echte Passwörter werden später sicher auf dem Server gespeichert.
-      </Text>
-      {demoUsers.map((user) => (
-        <View key={user.id} style={styles.listRow}>
-          <View>
-            <Text style={styles.listTitle}>{user.displayName}</Text>
-            <Text style={styles.muted}>Benutzername: {user.username}</Text>
-          </View>
-          <Text style={user.role === 'admin' ? styles.adminLabel : styles.employeeLabel}>
-            {user.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function SummaryBar({ orders }: { orders: TransportOrder[] }) {
+function SummaryBar({ orders, driversData, vehiclesData, trailersData }: { orders: TransportOrder[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[] }) {
   return (
     <View style={styles.stats}>
       <View style={styles.stat}>
@@ -855,15 +881,15 @@ function SummaryBar({ orders }: { orders: TransportOrder[] }) {
         <Text style={styles.muted}>Aufträge</Text>
       </View>
       <View style={styles.stat}>
-        <Text style={styles.statValue}>{vehicles.length}</Text>
+        <Text style={styles.statValue}>{vehiclesData.filter((item) => item.active).length}</Text>
         <Text style={styles.muted}>LKW</Text>
       </View>
       <View style={styles.stat}>
-        <Text style={styles.statValue}>{trailers.length}</Text>
+        <Text style={styles.statValue}>{trailersData.filter((item) => item.active).length}</Text>
         <Text style={styles.muted}>Anhänger</Text>
       </View>
       <View style={styles.stat}>
-        <Text style={styles.statValue}>{drivers.length}</Text>
+        <Text style={styles.statValue}>{driversData.filter((item) => item.active).length}</Text>
         <Text style={styles.muted}>Chauffeure</Text>
       </View>
     </View>
@@ -875,6 +901,11 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('calendar');
   const [orders, setOrders] = useState(initialOrders);
   const [repairs, setRepairs] = useState(initialRepairCases);
+  const [customerData, setCustomerData] = useState(initialCustomers);
+  const [driverData, setDriverData] = useState(initialDrivers);
+  const [vehicleData, setVehicleData] = useState(initialVehicles);
+  const [trailerData, setTrailerData] = useState(initialTrailers);
+  const [userData, setUserData] = useState(demoUsers);
   const [message, setMessage] = useState('');
   const { width } = useWindowDimensions();
   const maxWidth = width > 1100 ? 1040 : width;
@@ -991,9 +1022,6 @@ export default function App() {
               <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
               </Pressable>
-              <Pressable onPress={() => setScreen('users')} style={[styles.navButton, screen === 'users' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'users' && styles.navTextActive]}>Benutzer</Text>
-              </Pressable>
               <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Reparaturen ({repairs.filter((repair) => repair.status !== 'erledigt').length})</Text>
               </Pressable>
@@ -1020,28 +1048,27 @@ export default function App() {
             </Pressable>
           ) : null}
 
-          {isAdmin && <SummaryBar orders={orders} />}
+          {isAdmin && <SummaryBar orders={orders} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} />}
 
           {isAdmin && screen === 'calendar' && (
-            <DispositionView orders={orders} repairs={repairs} onNewOrder={() => setScreen('newOrder')} />
+            <DispositionView orders={orders} repairs={repairs} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
           )}
           {isAdmin && screen === 'newOrder' && (
-            <OrderForm onSave={saveOrder} onCancel={() => setScreen('calendar')} />
+            <OrderForm customersData={customerData} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
           {!isAdmin && screen === 'driver' && (
-            <DriverView orders={orders} user={currentUser} onAdvance={advanceOrder} />
+            <DriverView orders={orders} user={currentUser} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} />
           )}
           {!isAdmin && screen === 'repairs' && (
-            <EmployeeRepairsView repairs={repairs} user={currentUser} onReport={reportRepair} />
+            <EmployeeRepairsView repairs={repairs} user={currentUser} vehiclesData={vehicleData} onReport={reportRepair} />
           )}
           {isAdmin && screen === 'repairs' && (
-            <AdminRepairsView repairs={repairs} onUpdate={updateRepair} />
+            <AdminRepairsView repairs={repairs} vehiclesData={vehicleData} onUpdate={updateRepair} />
           )}
           {isAdmin && screen === 'billing' && (
-            <OfficeView orders={orders} onRelease={releaseForBilling} />
+            <OfficeView orders={orders} projectsData={projects} onRelease={releaseForBilling} />
           )}
-          {isAdmin && screen === 'masterData' && <MasterDataView />}
-          {isAdmin && screen === 'users' && <UserManagementView />}
+          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1126,6 +1153,16 @@ const styles = StyleSheet.create({
   choiceActive: { backgroundColor: '#0B4D27', borderColor: '#0B4D27' },
   choiceText: { color: '#34443A', fontWeight: '700' },
   choiceTextActive: { color: '#FFFFFF' },
+  dropdownWrap: { position: 'relative', zIndex: 10 },
+  dropdownButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 13 },
+  dropdownText: { color: '#142018', fontWeight: '700', flex: 1 },
+  dropdownPlaceholder: { color: '#7C887F', fontWeight: '500' },
+  dropdownArrow: { color: '#0B4D27', fontSize: 11, fontWeight: '900' },
+  dropdownMenu: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, marginTop: 5, overflow: 'hidden' },
+  dropdownOption: { paddingHorizontal: 13, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E7ECE8' },
+  dropdownOptionActive: { backgroundColor: '#E4F2E8' },
+  dropdownOptionText: { color: '#34443A' },
+  dropdownOptionTextActive: { color: '#0B4D27', fontWeight: '800' },
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   formField: { minWidth: 220, flex: 1 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' },

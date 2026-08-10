@@ -73,12 +73,24 @@ export interface Trailer {
 
 export interface Driver {
   id: string;
+  personnelNumber?: string;
   name: string;
+  phone?: string;
+  active: boolean;
+}
+
+export interface Customer {
+  id: string;
+  customerNumber: string;
+  name: string;
+  address?: string;
+  contact?: string;
   active: boolean;
 }
 
 export interface Project {
   id: string;
+  customerId?: string;
   customerName: string;
   projectNumber?: string;
   name: string;

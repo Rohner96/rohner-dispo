@@ -10,7 +10,7 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Zuteilung von Kunde/Projekt, Transportart, Chauffeur, LKW und Anhänger
 - flexible Auswahl der Verrechnungsart
 - neue Aufträge erscheinen sofort im Kalender
-- Stammdatenübersicht für Chauffeure, LKW und Anhänger
+- Stammdatenverwaltung für Kunden, Mitarbeitende, LKW, Anhänger und Benutzer
 - Transportarten Kipper, Kran und Tieflader als erste Beispiele
 - getrennte Zuteilung von Chauffeur, LKW und Anhänger
 - Auftragsstatus vom Eingang bis zur Verrechnung
@@ -18,7 +18,16 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.5.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.6.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.6.0:
+
+- Kunden, Mitarbeitende, LKW, Anhänger und Benutzer erfassen und bearbeiten
+- Stammdaten aktivieren und deaktivieren, ohne alte Auftragsbezüge zu löschen
+- echte aufklappbare Auswahlfelder in der Auftragserfassung
+- getrennte Auswahl von Kunde und Projekt
+- nur aktive Chauffeure, LKW und Anhänger stehen zur Auswahl
+- Benutzerrollen und Zuordnung zum Mitarbeiter als vorbereitete Testverwaltung
 
 Neu in Version 0.5.0:
 
@@ -53,7 +62,7 @@ Bei jeder Änderung am Hauptzweig erstellt GitHub automatisch eine neue Webversi
 
 Danach ist die App unter folgender Adresse erreichbar:
 
-`https://rohner-transport.github.io/rohner-dispo/`
+`https://rohner96.github.io/rohner-dispo/`
 
 ## Voraussetzungen
 
@@ -79,11 +88,11 @@ npm test
 
 ## Nächste Etappe
 
-1. dauerhafte lokale Speicherung
-2. Auftrag öffnen und bearbeiten
-3. Tages-/Wochenkalender nach Chauffeur und Fahrzeug
-4. digitaler Fuhrrapport mit Fotoaufnahme
-5. Server, Datenbank und Benutzeranmeldung
+1. Auftrag öffnen, bearbeiten und duplizieren
+2. Tages-/Wochenkalender nach Chauffeur und Fahrzeug
+3. digitaler Fuhrrapport mit Fotoaufnahme
+4. Abwesenheiten und Zeiterfassung ausbauen
+5. ganz am Schluss: Server, Datenbank und sichere Benutzeranmeldung
 
 Weitere fachliche Details stehen in `docs/FACHKONZEPT.md` und `docs/ARCHITEKTUR.md`.
 
