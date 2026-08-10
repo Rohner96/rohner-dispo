@@ -32,10 +32,10 @@ export type BillingMode =
 export type WorkflowStep =
   | 'zugeteilt'
   | 'angenommen'
+  | 'ladeort_angekommen'
   | 'beladung_gestartet'
   | 'beladung_beendet'
-  | 'unterwegs'
-  | 'angekommen'
+  | 'entladeort_angekommen'
   | 'entladung_gestartet'
   | 'entladung_beendet'
   | 'abgeschlossen';

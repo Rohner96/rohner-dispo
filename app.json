@@ -2,7 +2,7 @@
   "expo": {
     "name": "Rohner Dispo",
     "slug": "rohner-dispo",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {

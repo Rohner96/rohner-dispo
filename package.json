@@ -1,6 +1,6 @@
 {
   "name": "rohner-dispo",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -16,6 +16,7 @@
     "expo": "~57.0.11",
     "expo-image-picker": "^57.0.8",
     "expo-status-bar": "~57.0.1",
+    "jspdf": "^3.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-native": "0.86.2",

@@ -15,18 +15,23 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Transportarten Kipper, Kran und Tieflader als erste Beispiele
 - getrennte Zuteilung von Chauffeur, LKW und Anhänger
 - Auftragsstatus vom Eingang bis zur Verrechnung
+- geführter Chauffeur-Ablauf mit Navigation zum nächsten Ziel
+- getrennte Zeitmessung für Fahrten, Wartezeiten, Be- und Entladung
+- Korrektur des letzten Schritts bei Fehlbedienung
+- Lieferschein-PDF für Mitarbeiter und Administration
 - einfacher Verrechnungspool und Preisberechnung
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.7.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.8.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
 
-Neu in Version 0.7.0:
+Neu in Version 0.8.0:
 
-- freie Beschreibung für Ladeort und Abladeort bleibt bestehen
-- eigener Google-Maps-Link direkt unter jedem der beiden Orte
-- separate Schaltflächen zum Öffnen des Lade- und Abladeorts
-- bisherige Routenplanung für die komplette Fahrt bleibt erhalten
+- Auftrag annehmen und anschliessend zum Ladeort navigieren
+- Ankunft, Wartezeit, Beladung, Fahrt, Entladung und Abschluss protokollieren
+- laufende Zeitanzeige für jede Arbeitsphase
+- einen versehentlichen Statusschritt korrigieren
+- Lieferschein mit Zeitübersicht als PDF herunterladen
 
 Neu in Version 0.6.0:
 

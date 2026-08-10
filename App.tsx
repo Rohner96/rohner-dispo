@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -32,9 +32,18 @@ import {
 } from './src/domain/models';
 import { MasterDataView } from './src/components/MasterDataView';
 import { buildBillingPool, formatChf } from './src/lib/billing';
-import { isWorkflowFinished, nextWorkflowAction, nextWorkflowStep, workflowLabels } from './src/lib/workflow';
+import {
+  calculateWorkflowDurations,
+  isWorkflowFinished,
+  mapTargetForStep,
+  nextWorkflowAction,
+  nextWorkflowStep,
+  rollbackWorkflow,
+  workflowLabels,
+} from './src/lib/workflow';
 import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
 import { activeOnly } from './src/lib/masterData';
+import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
 
@@ -77,6 +86,37 @@ function openMapUrl(url: string) {
   if (!trimmedUrl) return;
   const completeUrl = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
   Linking.openURL(completeUrl);
+}
+
+function orderMapUrl(order: TransportOrder, target: 'pickup' | 'delivery'): string {
+  const explicitUrl = target === 'pickup' ? order.pickupMapUrl : order.deliveryMapUrl;
+  if (explicitUrl?.trim()) return explicitUrl;
+  const place = target === 'pickup' ? order.pickup : order.delivery;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+}
+
+function saveOrderDeliveryNote(
+  order: TransportOrder,
+  projectsData: typeof projects,
+  driversData: Driver[],
+  vehiclesData: Vehicle[],
+  trailersData: Trailer[],
+) {
+  downloadDeliveryNote(buildDeliveryNoteData(
+    order,
+    lookup(projectsData, order.projectId),
+    lookup(driversData, order.driverId),
+    lookup(vehiclesData, order.vehicleId),
+    lookup(trailersData, order.trailerId),
+  ));
+}
+
+function formatLiveDuration(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
 function ChoiceRow<T extends string>({
@@ -502,6 +542,7 @@ function DriverView({
   vehiclesData,
   trailersData,
   onAdvance,
+  onBack,
 }: {
   orders: TransportOrder[];
   user: AppUser;
@@ -510,7 +551,14 @@ function DriverView({
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
   onAdvance: (id: string) => void;
+  onBack: (id: string) => void;
 }) {
+  const [now, setNow] = useState(() => new Date());
+  const [backConfirmationId, setBackConfirmationId] = useState<string>();
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const assigned = orders.filter((order) => (
     order.driverId === user.driverId && order.status !== 'verrechnet'
   ));
@@ -522,15 +570,42 @@ function DriverView({
       {assigned.map((order) => (
         <View key={order.id}>
           <OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} />
+          {(() => {
+            const mapTarget = mapTargetForStep(order.workflowStep);
+            const durations = calculateWorkflowDurations(order.workflowEvents, order.workflowStep, now);
+            return (
+              <>
+                {mapTarget ? (
+                  <View style={styles.nextDestinationBox}>
+                    <Text style={styles.nextDestinationEyebrow}>NÄCHSTES ZIEL</Text>
+                    <Text style={styles.nextDestinationTitle}>
+                      {mapTarget === 'pickup' ? order.pickup : order.delivery}
+                    </Text>
+                    <Pressable style={styles.mapButtonStrong} onPress={() => openMapUrl(orderMapUrl(order, mapTarget))}>
+                      <Text style={styles.primaryButtonText}>
+                        {mapTarget === 'pickup' ? 'Google Maps zum Ladeort' : 'Google Maps zum Abladeort'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {order.workflowStep !== 'zugeteilt' ? (
+                  <View style={styles.timeSummary}>
+                    <Text style={styles.timeSummaryTitle}>Laufende Zeiterfassung</Text>
+                    <View style={styles.timeGrid}>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Fahrt Ladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_ladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Wartezeit Ladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_ladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Beladung</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.beladung)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Fahrt Abladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_abladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Wartezeit Abladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_abladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Entladung</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.entladung)}</Text></View>
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            );
+          })()}
           <View style={styles.driverActions}>
-            <Pressable
-              style={styles.mapButton}
-              onPress={() => Linking.openURL(
-                `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(order.pickup)}&destination=${encodeURIComponent(order.delivery)}&travelmode=driving`,
-              )}
-            >
-              <Text style={styles.mapButtonText}>Route mit Google Maps</Text>
-            </Pressable>
             <Pressable
               disabled={isWorkflowFinished(order.workflowStep)}
               style={[styles.actionButton, isWorkflowFinished(order.workflowStep) && styles.disabledButton]}
@@ -538,7 +613,31 @@ function DriverView({
             >
               <Text style={styles.actionButtonText}>{nextWorkflowAction(order.workflowStep)}</Text>
             </Pressable>
+            {order.workflowStep !== 'zugeteilt' && order.status !== 'verrechenbar' ? (
+              <Pressable style={styles.backButton} onPress={() => setBackConfirmationId(order.id)}>
+                <Text style={styles.backButtonText}>↶ Einen Schritt zurück</Text>
+              </Pressable>
+            ) : null}
           </View>
+          {backConfirmationId === order.id ? (
+            <View style={styles.backConfirmation}>
+              <Text style={styles.backConfirmationTitle}>Letzten Schritt wirklich korrigieren?</Text>
+              <Text style={styles.description}>Die Zeit läuft danach wieder in der vorherigen Phase weiter.</Text>
+              <View style={styles.driverActions}>
+                <Pressable style={styles.secondaryButton} onPress={() => setBackConfirmationId(undefined)}>
+                  <Text style={styles.secondaryButtonText}>Abbrechen</Text>
+                </Pressable>
+                <Pressable style={styles.backConfirmButton} onPress={() => { onBack(order.id); setBackConfirmationId(undefined); }}>
+                  <Text style={styles.primaryButtonText}>Ja, Schritt zurück</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          {isWorkflowFinished(order.workflowStep) ? (
+            <Pressable style={styles.pdfButton} onPress={() => saveOrderDeliveryNote(order, projectsData, driversData, vehiclesData, trailersData)}>
+              <Text style={styles.pdfButtonText}>Lieferschein als PDF herunterladen</Text>
+            </Pressable>
+          ) : null}
           {order.workflowEvents.length > 0 && (
             <View style={styles.timeline}>
               {order.workflowEvents.map((event, index) => (
@@ -868,10 +967,16 @@ function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
 function OfficeView({
   orders,
   projectsData,
+  driversData,
+  vehiclesData,
+  trailersData,
   onRelease,
 }: {
   orders: TransportOrder[];
   projectsData: typeof projects;
+  driversData: Driver[];
+  vehiclesData: Vehicle[];
+  trailersData: Trailer[];
   onRelease: (id: string) => void;
 }) {
   const candidates = buildBillingPool(orders, projectsData);
@@ -890,9 +995,14 @@ function OfficeView({
               <Text style={styles.muted}>{order.orderNumber} · {order.title}</Text>
               <Text style={styles.description}>Vom Chauffeur abgeschlossen</Text>
             </View>
-            <Pressable style={styles.releaseButton} onPress={() => onRelease(order.id)}>
-              <Text style={styles.primaryButtonText}>Zur Verrechnung freigeben</Text>
-            </Pressable>
+            <View style={styles.billingActions}>
+              <Pressable style={styles.pdfSmallButton} onPress={() => saveOrderDeliveryNote(order, projectsData, driversData, vehiclesData, trailersData)}>
+                <Text style={styles.pdfButtonText}>PDF</Text>
+              </Pressable>
+              <Pressable style={styles.releaseButton} onPress={() => onRelease(order.id)}>
+                <Text style={styles.primaryButtonText}>Zur Verrechnung freigeben</Text>
+              </Pressable>
+            </View>
           </View>
         );
       })}
@@ -908,7 +1018,12 @@ function OfficeView({
             <Text style={styles.muted}>{project.name} · LS {order.reportNumber ?? 'offen'}</Text>
             <Text style={styles.description}>{order.title}</Text>
           </View>
-          <Text style={styles.amount}>{formatChf(amount)}</Text>
+          <View style={styles.billingActions}>
+            <Text style={styles.amount}>{formatChf(amount)}</Text>
+            <Pressable style={styles.pdfSmallButton} onPress={() => saveOrderDeliveryNote(order, projectsData, driversData, vehiclesData, trailersData)}>
+              <Text style={styles.pdfButtonText}>Lieferschein PDF</Text>
+            </Pressable>
+          </View>
         </View>
       ))}
       {candidates.length === 0 && (
@@ -973,7 +1088,9 @@ export default function App() {
       const step = nextWorkflowStep(order.workflowStep);
       const status = step === 'abgeschlossen'
         ? 'abgeschlossen'
-        : ['unterwegs', 'angekommen', 'entladung_gestartet', 'entladung_beendet'].includes(step)
+        : step === 'zugeteilt'
+          ? 'zugeteilt'
+          : ['angenommen', 'ladeort_angekommen', 'beladung_gestartet', 'beladung_beendet', 'entladeort_angekommen', 'entladung_gestartet', 'entladung_beendet'].includes(step)
           ? 'unterwegs'
           : 'zugeteilt';
       return {
@@ -984,6 +1101,20 @@ export default function App() {
       };
     }));
     setMessage('Status wurde aktualisiert.');
+  }
+
+  function backOrder(id: string) {
+    setOrders((current) => current.map((order) => {
+      if (order.id !== id || order.status === 'verrechenbar' || order.status === 'verrechnet') return order;
+      const corrected = rollbackWorkflow(order.workflowEvents, order.workflowStep);
+      return {
+        ...order,
+        workflowStep: corrected.step,
+        workflowEvents: corrected.events,
+        status: corrected.step === 'zugeteilt' ? 'zugeteilt' : 'unterwegs',
+      };
+    }));
+    setMessage('Der letzte Schritt wurde korrigiert. Die vorherige Zeit läuft weiter.');
   }
 
   function releaseForBilling(id: string) {
@@ -1102,7 +1233,7 @@ export default function App() {
             <OrderForm customersData={customerData} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
           {!isAdmin && screen === 'driver' && (
-            <DriverView orders={orders} user={currentUser} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} />
+            <DriverView orders={orders} user={currentUser} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} onBack={backOrder} />
           )}
           {!isAdmin && screen === 'repairs' && (
             <EmployeeRepairsView repairs={repairs} user={currentUser} vehiclesData={vehicleData} onReport={reportRepair} />
@@ -1111,7 +1242,7 @@ export default function App() {
             <AdminRepairsView repairs={repairs} vehiclesData={vehicleData} onUpdate={updateRepair} />
           )}
           {isAdmin && screen === 'billing' && (
-            <OfficeView orders={orders} projectsData={projects} onRelease={releaseForBilling} />
+            <OfficeView orders={orders} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
           )}
           {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
         </View>
@@ -1186,12 +1317,31 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.45 },
   mapButton: { flexGrow: 1, borderWidth: 1, borderColor: '#0B4D27', borderRadius: 11, padding: 13, alignItems: 'center' },
   mapButtonText: { color: '#0B4D27', fontWeight: '900' },
+  mapButtonStrong: { backgroundColor: '#0B4D27', borderRadius: 11, padding: 14, alignItems: 'center', marginTop: 10 },
+  nextDestinationBox: { backgroundColor: '#E4F2E8', borderWidth: 1, borderColor: '#A8CDB3', borderRadius: 13, padding: 15, marginBottom: 10 },
+  nextDestinationEyebrow: { color: '#487255', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  nextDestinationTitle: { color: '#142018', fontSize: 18, fontWeight: '900', marginTop: 4 },
+  timeSummary: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E6E1', borderRadius: 13, padding: 14, marginBottom: 10 },
+  timeSummaryTitle: { color: '#142018', fontWeight: '900', marginBottom: 10 },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeCell: { flexGrow: 1, minWidth: 135, backgroundColor: '#F4F7F4', borderRadius: 9, padding: 10 },
+  timeLabel: { color: '#66736A', fontSize: 11, fontWeight: '700' },
+  timeValue: { color: '#0B4D27', fontSize: 17, fontWeight: '900', marginTop: 3 },
+  backButton: { flexGrow: 1, borderWidth: 1, borderColor: '#A64B3C', backgroundColor: '#FFF7F5', borderRadius: 11, padding: 13, alignItems: 'center' },
+  backButtonText: { color: '#8E3529', fontWeight: '900' },
+  backConfirmation: { backgroundColor: '#FFF7F5', borderWidth: 1, borderColor: '#D8AAA2', borderRadius: 12, padding: 14, marginBottom: 12 },
+  backConfirmationTitle: { color: '#8E3529', fontWeight: '900', fontSize: 16 },
+  backConfirmButton: { flexGrow: 1, backgroundColor: '#A13E30', borderRadius: 11, padding: 14, alignItems: 'center' },
+  pdfButton: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#0B4D27', borderRadius: 11, padding: 14, alignItems: 'center', marginBottom: 12 },
+  pdfSmallButton: { borderWidth: 1, borderColor: '#0B4D27', backgroundColor: '#F4FAF6', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
+  pdfButtonText: { color: '#0B4D27', fontWeight: '900' },
   timeline: { backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 12, marginBottom: 20 },
   timelineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#E7ECE8' },
   timelineLabel: { color: '#34443A', flex: 1 },
   timelineTime: { color: '#66736A', fontWeight: '700' },
   billingRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10, gap: 12, borderWidth: 1, borderColor: '#E2E8E2' },
   billingMain: { flex: 1 },
+  billingActions: { alignItems: 'stretch', gap: 8 },
   amount: { color: '#0B4D27', fontWeight: '900' },
   releaseButton: { backgroundColor: '#0B4D27', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10 },
   empty: { color: '#6A756D', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 18 },
