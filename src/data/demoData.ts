@@ -1,4 +1,4 @@
-import { Absence, Driver, Project, Trailer, TransportOrder, Vehicle } from '../domain/models';
+import { Absence, Driver, Project, RepairCase, Trailer, TransportOrder, Vehicle } from '../domain/models';
 
 export const drivers: Driver[] = [
   { id: 'd1', name: 'René Rohner', active: true },
@@ -93,5 +93,42 @@ export const initialOrders: TransportOrder[] = [
     trailerId: 't2',
     billingMode: 'pauschal',
     rate: 1450,
+  },
+];
+
+export const initialRepairCases: RepairCase[] = [
+  {
+    id: 'r1',
+    caseNumber: 'REP-2026-001',
+    vehicleId: 'v2',
+    reportedByUserId: 'u-rene',
+    reportedByName: 'René Rohner',
+    category: 'technischer_defekt',
+    priority: 'dringend',
+    title: 'Scheibenwischer ohne Funktion',
+    description: 'Der linke Scheibenwischerarm bewegt sich nicht mehr zuverlässig.',
+    reportedAt: '2026-08-10T06:45:00.000Z',
+    status: 'gemeldet',
+    events: [{ status: 'gemeldet', at: '2026-08-10T06:45:00.000Z', byUserId: 'u-rene' }],
+  },
+  {
+    id: 'r2',
+    caseNumber: 'REP-2026-002',
+    vehicleId: 'v1',
+    reportedByUserId: 'u-marcel',
+    reportedByName: 'Marcel Muster',
+    category: 'verschleiss',
+    priority: 'normal',
+    title: 'Seitenmarkierungsleuchte defekt',
+    description: 'Markierungsleuchte hinten rechts funktioniert nicht mehr.',
+    reportedAt: '2026-08-09T15:20:00.000Z',
+    status: 'termin_organisiert',
+    workshopName: 'Nutzfahrzeug-Center Baden',
+    workshopDate: '2026-08-13',
+    workshopTime: '09:00',
+    events: [
+      { status: 'gemeldet', at: '2026-08-09T15:20:00.000Z', byUserId: 'u-marcel' },
+      { status: 'termin_organisiert', at: '2026-08-10T08:10:00.000Z', byUserId: 'u-admin' },
+    ],
   },
 ];

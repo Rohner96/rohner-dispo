@@ -2,7 +2,7 @@
   "expo": {
     "name": "Rohner Dispo",
     "slug": "rohner-dispo",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -15,6 +15,16 @@
     "web": {
       "bundler": "metro"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Die Rohner Kommunikationsapp benötigt Zugriff auf Fotos für Schadenmeldungen.",
+          "cameraPermission": "Die Rohner Kommunikationsapp benötigt die Kamera, um Schäden und Defekte zu fotografieren.",
+          "microphonePermission": false
+        }
+      ]
+    ],
     "experiments": {
       "baseUrl": "/rohner-dispo"
     }

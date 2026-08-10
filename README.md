@@ -1,4 +1,4 @@
-# Rohner Dispo
+# Rohner Kommunikationsapp
 
 Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem der Rohner AG Transporte.
 
@@ -18,7 +18,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.4.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.5.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.5.0:
+
+- Mitarbeiter melden Schäden, technische Defekte und Verschleiss je LKW
+- Fotoaufnahme auf dem Handy und Bildauswahl im Browser
+- persönliche Liste offener Meldungen
+- Administrator sieht Melder, Fahrzeug, Dringlichkeit, Beschreibung und Foto
+- Werkstatttermine erscheinen im Wochenkalender
+- Statusablauf von «Neu gemeldet» bis «Reparatur erledigt»
+- erledigte Fälle verschwinden aus der offenen Mitarbeiterliste
 
 Neu in Version 0.4.0:
 

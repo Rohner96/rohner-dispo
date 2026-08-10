@@ -113,3 +113,40 @@ export interface BillingCandidate {
   project: Project;
   amount?: number;
 }
+
+export type RepairCategory = 'unfallschaden' | 'technischer_defekt' | 'verschleiss';
+
+export type RepairPriority = 'normal' | 'dringend' | 'fahrzeug_stilllegen';
+
+export type RepairStatus =
+  | 'gemeldet'
+  | 'termin_organisiert'
+  | 'in_reparatur'
+  | 'erledigt';
+
+export interface RepairEvent {
+  status: RepairStatus;
+  at: string;
+  byUserId: string;
+  note?: string;
+}
+
+export interface RepairCase {
+  id: string;
+  caseNumber: string;
+  vehicleId: string;
+  reportedByUserId: string;
+  reportedByName: string;
+  category: RepairCategory;
+  priority: RepairPriority;
+  title: string;
+  description: string;
+  photoUri?: string;
+  reportedAt: string;
+  status: RepairStatus;
+  workshopName?: string;
+  workshopDate?: string;
+  workshopTime?: string;
+  adminNote?: string;
+  events: RepairEvent[];
+}

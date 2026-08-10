@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import {
   Pressable,
@@ -10,20 +11,26 @@ import {
   View,
   Image,
   Linking,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 
-import { absences, drivers, initialOrders, projects, trailers, vehicles } from './src/data/demoData';
+import { absences, drivers, initialOrders, initialRepairCases, projects, trailers, vehicles } from './src/data/demoData';
 import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
   OrderType,
+  RepairCase,
+  RepairCategory,
+  RepairPriority,
+  RepairStatus,
   TransportOrder,
 } from './src/domain/models';
 import { buildBillingPool, formatChf } from './src/lib/billing';
 import { isWorkflowFinished, nextWorkflowAction, nextWorkflowStep, workflowLabels } from './src/lib/workflow';
+import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
 
-type Screen = 'calendar' | 'newOrder' | 'driver' | 'billing' | 'masterData' | 'users';
+type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
 
 const typeLabels: Record<OrderType, string> = {
   kipper: 'Kipper',
@@ -128,9 +135,11 @@ const weekDays = [
 
 function DispositionView({
   orders,
+  repairs,
   onNewOrder,
 }: {
   orders: TransportOrder[];
+  repairs: RepairCase[];
   onNewOrder: () => void;
 }) {
   const [calendarMode, setCalendarMode] = useState<'week' | 'list'>('week');
@@ -162,6 +171,7 @@ function DispositionView({
             {weekDays.map((day) => {
               const dayOrders = orders.filter((order) => order.date === day.date);
               const dayAbsences = absences.filter((absence) => day.date >= absence.from && day.date <= absence.to);
+              const dayRepairs = workshopRepairsOnDate(repairs, day.date);
               return (
                 <View key={day.date} style={styles.weekColumn}>
                   <Text style={styles.weekDay}>{day.label}</Text>
@@ -185,7 +195,17 @@ function DispositionView({
                       </View>
                     );
                   })}
-                  {dayOrders.length === 0 && dayAbsences.length === 0 && (
+                  {dayRepairs.map((repair) => {
+                    const vehicle = lookup(vehicles, repair.vehicleId);
+                    return (
+                      <View key={`${repair.id}-${day.date}`} style={styles.calendarRepair}>
+                        <Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text>
+                        <Text style={styles.calendarTitle}>{vehicle?.internalNumber} · {repair.title}</Text>
+                        <Text style={styles.calendarMeta}>{repair.workshopName ?? 'Werkstatt offen'}</Text>
+                      </View>
+                    );
+                  })}
+                  {dayOrders.length === 0 && dayAbsences.length === 0 && dayRepairs.length === 0 && (
                     <Text style={styles.calendarEmpty}>Noch frei</Text>
                   )}
                 </View>
@@ -412,6 +432,242 @@ function DriverView({
   );
 }
 
+const repairCategoryLabels: Record<RepairCategory, string> = {
+  unfallschaden: 'Unfall / äusserer Schaden',
+  technischer_defekt: 'Technischer Defekt',
+  verschleiss: 'Verschleiss / altersbedingt',
+};
+
+const repairPriorityLabels: Record<RepairPriority, string> = {
+  normal: 'Normal',
+  dringend: 'Dringend',
+  fahrzeug_stilllegen: 'Fahrzeug nicht weiterfahren',
+};
+
+function RepairCard({ repair, showReporter = false }: { repair: RepairCase; showReporter?: boolean }) {
+  const vehicle = lookup(vehicles, repair.vehicleId);
+  return (
+    <View style={styles.repairCard}>
+      <View style={styles.cardTopline}>
+        <Text style={styles.orderNumber}>{repair.caseNumber} · {repairCategoryLabels[repair.category]}</Text>
+        <Text style={[styles.repairStatus, repair.priority === 'fahrzeug_stilllegen' && styles.repairStatusCritical]}>
+          {repairStatusLabels[repair.status]}
+        </Text>
+      </View>
+      <Text style={styles.cardTitle}>{repair.title}</Text>
+      <Text style={styles.route}>{vehicle?.internalNumber} · {vehicle?.label}</Text>
+      <Text style={styles.description}>{repair.description}</Text>
+      {repair.photoUri ? <Image source={{ uri: repair.photoUri }} style={styles.repairPhoto} resizeMode="cover" /> : null}
+      <View style={styles.tags}>
+        <Text style={styles.tag}>{repairPriorityLabels[repair.priority]}</Text>
+        {showReporter && <Text style={styles.tag}>Gemeldet von {repair.reportedByName}</Text>}
+        <Text style={styles.tag}>{new Date(repair.reportedAt).toLocaleString('de-CH')}</Text>
+      </View>
+      {repair.workshopDate ? (
+        <View style={styles.appointmentBox}>
+          <Text style={styles.appointmentTitle}>Werkstatttermin</Text>
+          <Text style={styles.description}>{repair.workshopDate} · {repair.workshopTime || 'Zeit offen'}</Text>
+          <Text style={styles.muted}>{repair.workshopName || 'Werkstatt noch offen'}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function EmployeeRepairsView({
+  repairs,
+  user,
+  onReport,
+}: {
+  repairs: RepairCase[];
+  user: AppUser;
+  onReport: (repair: RepairCase) => void;
+}) {
+  const [vehicleId, setVehicleId] = useState(vehicles[0]?.id ?? '');
+  const [category, setCategory] = useState<RepairCategory>('technischer_defekt');
+  const [priority, setPriority] = useState<RepairPriority>('normal');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [photoUri, setPhotoUri] = useState<string>();
+  const [formError, setFormError] = useState('');
+  const ownActiveRepairs = activeRepairsForEmployee(repairs, user.id);
+
+  async function takePhoto() {
+    setFormError('');
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setFormError('Bitte erlaube den Kamerazugriff, damit du ein Foto aufnehmen kannst.');
+        return;
+      }
+    }
+    const result = Platform.OS === 'web'
+      ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 })
+      : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.75 });
+    if (!result.canceled && result.assets[0]?.uri) setPhotoUri(result.assets[0].uri);
+  }
+
+  function saveRepair() {
+    if (!title.trim() || !description.trim() || !photoUri) {
+      setFormError('Bitte Kurzbezeichnung, Beschreibung und ein Foto erfassen.');
+      return;
+    }
+    const now = new Date().toISOString();
+    const caseNumber = `REP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+    onReport({
+      id: `repair-${Date.now()}`,
+      caseNumber,
+      vehicleId,
+      reportedByUserId: user.id,
+      reportedByName: user.displayName,
+      category,
+      priority,
+      title: title.trim(),
+      description: description.trim(),
+      photoUri,
+      reportedAt: now,
+      status: 'gemeldet',
+      events: [{ status: 'gemeldet', at: now, byUserId: user.id }],
+    });
+    setTitle('');
+    setDescription('');
+    setPhotoUri(undefined);
+    setPriority('normal');
+    setFormError('');
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>FAHRZEUG & WERKSTATT</Text>
+      <Text style={styles.heading}>Schaden oder Defekt melden</Text>
+
+      <Text style={styles.fieldLabel}>Betroffener LKW</Text>
+      <ChoiceRow
+        options={vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.internalNumber} · ${vehicle.label}` }))}
+        selected={vehicleId}
+        onSelect={setVehicleId}
+      />
+
+      <Text style={styles.fieldLabel}>Art der Meldung</Text>
+      <ChoiceRow
+        options={(Object.keys(repairCategoryLabels) as RepairCategory[]).map((value) => ({ value, label: repairCategoryLabels[value] }))}
+        selected={category}
+        onSelect={setCategory}
+      />
+
+      <Text style={styles.fieldLabel}>Dringlichkeit</Text>
+      <ChoiceRow
+        options={(Object.keys(repairPriorityLabels) as RepairPriority[]).map((value) => ({ value, label: repairPriorityLabels[value] }))}
+        selected={priority}
+        onSelect={setPriority}
+      />
+
+      <Text style={styles.fieldLabel}>Kurzbezeichnung</Text>
+      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="z. B. Scheibenwischer defekt" />
+      <Text style={styles.fieldLabel}>Was ist passiert oder defekt?</Text>
+      <TextInput
+        multiline
+        numberOfLines={4}
+        style={[styles.input, styles.textArea]}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Schaden möglichst genau beschreiben"
+      />
+
+      <Pressable style={styles.cameraButton} onPress={takePhoto}>
+        <Text style={styles.cameraButtonText}>{photoUri ? 'Foto ersetzen' : '📷 Foto aufnehmen'}</Text>
+      </Pressable>
+      {photoUri ? <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" /> : null}
+      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+      <Pressable style={styles.primaryButtonLarge} onPress={saveRepair}>
+        <Text style={styles.primaryButtonText}>Reparaturfall melden</Text>
+      </Pressable>
+
+      <Text style={styles.listHeading}>Meine offenen Meldungen</Text>
+      {ownActiveRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} />)}
+      {ownActiveRepairs.length === 0 && <Text style={styles.empty}>Du hast keine offenen Reparaturfälle.</Text>}
+    </View>
+  );
+}
+
+function AdminRepairCard({
+  repair,
+  onUpdate,
+}: {
+  repair: RepairCase;
+  onUpdate: (id: string, status: RepairStatus, details?: Partial<RepairCase>) => void;
+}) {
+  const [workshopName, setWorkshopName] = useState(repair.workshopName ?? '');
+  const [workshopDate, setWorkshopDate] = useState(repair.workshopDate ?? '2026-08-14');
+  const [workshopTime, setWorkshopTime] = useState(repair.workshopTime ?? '08:00');
+  const [adminNote, setAdminNote] = useState(repair.adminNote ?? '');
+
+  return (
+    <View style={styles.adminRepairBlock}>
+      <RepairCard repair={repair} showReporter />
+      {repair.status === 'gemeldet' ? (
+        <View style={styles.repairAdminPanel}>
+          <Text style={styles.listTitle}>Werkstatttermin organisieren</Text>
+          <TextInput style={styles.input} value={workshopName} onChangeText={setWorkshopName} placeholder="Werkstatt" />
+          <View style={styles.formGrid}>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Datum</Text>
+              <TextInput style={styles.input} value={workshopDate} onChangeText={setWorkshopDate} placeholder="JJJJ-MM-TT" />
+            </View>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Zeit</Text>
+              <TextInput style={styles.input} value={workshopTime} onChangeText={setWorkshopTime} placeholder="HH:MM" />
+            </View>
+          </View>
+          <TextInput style={styles.input} value={adminNote} onChangeText={setAdminNote} placeholder="Interne Notiz (optional)" />
+          <Pressable
+            style={styles.primaryButtonLarge}
+            onPress={() => onUpdate(repair.id, 'termin_organisiert', { workshopName, workshopDate, workshopTime, adminNote })}
+          >
+            <Text style={styles.primaryButtonText}>Termin speichern und in Kalender eintragen</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {repair.status === 'termin_organisiert' ? (
+        <Pressable style={styles.actionButton} onPress={() => onUpdate(repair.id, 'in_reparatur')}>
+          <Text style={styles.actionButtonText}>Fahrzeug ist in Reparatur</Text>
+        </Pressable>
+      ) : null}
+      {repair.status === 'in_reparatur' ? (
+        <Pressable style={styles.completeRepairButton} onPress={() => onUpdate(repair.id, 'erledigt')}>
+          <Text style={styles.primaryButtonText}>Reparatur erledigt</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function AdminRepairsView({
+  repairs,
+  onUpdate,
+}: {
+  repairs: RepairCase[];
+  onUpdate: (id: string, status: RepairStatus, details?: Partial<RepairCase>) => void;
+}) {
+  const openRepairs = repairs.filter((repair) => repair.status !== 'erledigt');
+  const finishedRepairs = repairs.filter((repair) => repair.status === 'erledigt');
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>FAHRZEUGE & WERKSTATT</Text>
+      <Text style={styles.heading}>Reparaturfälle</Text>
+      <Text style={styles.infoBox}>Neue Meldungen werden nach Dringlichkeit angezeigt. Nur Administratoren können Werkstatttermine und Status ändern.</Text>
+      {openRepairs.map((repair) => <AdminRepairCard key={repair.id} repair={repair} onUpdate={onUpdate} />)}
+      {openRepairs.length === 0 && <Text style={styles.empty}>Keine offenen Reparaturfälle.</Text>}
+      {finishedRepairs.length > 0 ? (
+        <>
+          <Text style={styles.listHeading}>Erledigt</Text>
+          {finishedRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} showReporter />)}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -618,6 +874,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser>();
   const [screen, setScreen] = useState<Screen>('calendar');
   const [orders, setOrders] = useState(initialOrders);
+  const [repairs, setRepairs] = useState(initialRepairCases);
   const [message, setMessage] = useState('');
   const { width } = useWindowDimensions();
   const maxWidth = width > 1100 ? 1040 : width;
@@ -664,6 +921,24 @@ export default function App() {
     setOrders((current) => [...current, order]);
     setScreen('calendar');
     setMessage(`${order.orderNumber} wurde gespeichert und eingeplant.`);
+  }
+
+  function reportRepair(repair: RepairCase) {
+    setRepairs((current) => [repair, ...current]);
+    setMessage(`${repair.caseNumber} wurde gemeldet und an die Administration übermittelt.`);
+  }
+
+  function updateRepair(id: string, status: RepairStatus, details: Partial<RepairCase> = {}) {
+    setRepairs((current) => current.map((repair) => {
+      if (repair.id !== id || !canChangeRepairStatus(repair.status, status)) return repair;
+      return {
+        ...repair,
+        ...details,
+        status,
+        events: [...repair.events, { status, at: new Date().toISOString(), byUserId: currentUser?.id ?? 'u-admin' }],
+      };
+    }));
+    setMessage(status === 'erledigt' ? 'Reparatur wurde als erledigt abgeschlossen.' : 'Reparaturstatus wurde aktualisiert.');
   }
 
   if (!currentUser) {
@@ -719,8 +994,22 @@ export default function App() {
               <Pressable onPress={() => setScreen('users')} style={[styles.navButton, screen === 'users' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'users' && styles.navTextActive]}>Benutzer</Text>
               </Pressable>
+              <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Reparaturen ({repairs.filter((repair) => repair.status !== 'erledigt').length})</Text>
+              </Pressable>
               <Pressable onPress={() => setScreen('billing')} style={[styles.navButton, screen === 'billing' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'billing' && styles.navTextActive]}>Verrechnung</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {!isAdmin && (
+            <View style={styles.subNavigation}>
+              <Pressable onPress={() => setScreen('driver')} style={[styles.navButton, screen === 'driver' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'driver' && styles.navTextActive]}>Meine Aufträge</Text>
+              </Pressable>
+              <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Schaden melden ({activeRepairsForEmployee(repairs, currentUser.id).length})</Text>
               </Pressable>
             </View>
           )}
@@ -734,13 +1023,19 @@ export default function App() {
           {isAdmin && <SummaryBar orders={orders} />}
 
           {isAdmin && screen === 'calendar' && (
-            <DispositionView orders={orders} onNewOrder={() => setScreen('newOrder')} />
+            <DispositionView orders={orders} repairs={repairs} onNewOrder={() => setScreen('newOrder')} />
           )}
           {isAdmin && screen === 'newOrder' && (
             <OrderForm onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
           {!isAdmin && screen === 'driver' && (
             <DriverView orders={orders} user={currentUser} onAdvance={advanceOrder} />
+          )}
+          {!isAdmin && screen === 'repairs' && (
+            <EmployeeRepairsView repairs={repairs} user={currentUser} onReport={reportRepair} />
+          )}
+          {isAdmin && screen === 'repairs' && (
+            <AdminRepairsView repairs={repairs} onUpdate={updateRepair} />
           )}
           {isAdmin && screen === 'billing' && (
             <OfficeView orders={orders} onRelease={releaseForBilling} />
@@ -795,6 +1090,7 @@ const styles = StyleSheet.create({
   weekDay: { color: '#0B4D27', fontWeight: '900', marginBottom: 10 },
   calendarOrder: { borderLeftWidth: 5, backgroundColor: '#F4F7F4', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarAbsence: { backgroundColor: '#FFF5C7', borderRadius: 8, padding: 9, marginBottom: 8 },
+  calendarRepair: { borderLeftWidth: 5, borderLeftColor: '#D97706', backgroundColor: '#FFF1DD', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarTime: { color: '#59675E', fontSize: 11, fontWeight: '700' },
   calendarTitle: { color: '#142018', fontWeight: '900', marginTop: 3 },
   calendarMeta: { color: '#66736A', fontSize: 12, marginTop: 3 },
@@ -842,6 +1138,18 @@ const styles = StyleSheet.create({
   adminLabel: { color: '#0B4D27', backgroundColor: '#E4F2E8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: '800' },
   employeeLabel: { color: '#34443A', backgroundColor: '#EEF2EE', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: '800' },
   infoBox: { color: '#34443A', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginBottom: 12, lineHeight: 20 },
+  repairCard: { backgroundColor: '#FFFFFF', borderRadius: 14, borderLeftWidth: 6, borderLeftColor: '#D97706', padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E7DED1' },
+  repairStatus: { color: '#8A4B08', backgroundColor: '#FFF1DD', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, fontSize: 11, fontWeight: '800' },
+  repairStatusCritical: { color: '#FFFFFF', backgroundColor: '#B42318' },
+  repairPhoto: { width: '100%', height: 220, borderRadius: 11, marginTop: 13, backgroundColor: '#E7ECE8' },
+  photoPreview: { width: '100%', height: 240, borderRadius: 12, marginBottom: 12, backgroundColor: '#E7ECE8' },
+  cameraButton: { backgroundColor: '#FFD11A', borderRadius: 11, padding: 15, alignItems: 'center', marginTop: 16, marginBottom: 12 },
+  cameraButtonText: { color: '#17331F', fontWeight: '900' },
+  appointmentBox: { backgroundColor: '#FFF8E8', borderRadius: 10, padding: 12, marginTop: 12 },
+  appointmentTitle: { color: '#8A4B08', fontWeight: '900' },
+  adminRepairBlock: { marginBottom: 22 },
+  repairAdminPanel: { backgroundColor: '#E7ECE8', borderRadius: 12, padding: 14, gap: 10 },
+  completeRepairButton: { backgroundColor: '#0B4D27', borderRadius: 11, padding: 14, alignItems: 'center' },
   loginPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B4D27', padding: 20 },
   loginCard: { width: '100%', maxWidth: 440, backgroundColor: '#F4F7F4', borderRadius: 18, padding: 24 },
   loginLogo: { alignSelf: 'flex-end', width: 250, maxWidth: '78%', height: 52 },
