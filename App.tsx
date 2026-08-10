@@ -12,28 +12,16 @@ import {
 } from 'react-native';
 
 import { drivers, initialOrders, projects, trailers, vehicles } from './src/data/demoData';
+import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
   OrderStatus,
   OrderType,
   TransportOrder,
-  UserRole,
 } from './src/domain/models';
 import { buildBillingPool, formatChf } from './src/lib/billing';
 
-type Screen = 'calendar' | 'newOrder' | 'driver' | 'billing' | 'masterData';
-
-const roleLabels: Record<UserRole, string> = {
-  dispo: 'Disposition',
-  chauffeur: 'Chauffeur',
-  sekretariat: 'Sekretariat',
-};
-
-const defaultScreen: Record<UserRole, Screen> = {
-  dispo: 'calendar',
-  chauffeur: 'driver',
-  sekretariat: 'billing',
-};
+type Screen = 'calendar' | 'newOrder' | 'driver' | 'billing' | 'masterData' | 'users';
 
 const statusLabels: Record<OrderStatus, string> = {
   anfrage: 'Anfrage',
@@ -314,12 +302,22 @@ function OrderForm({
   );
 }
 
-function DriverView({ orders, onAdvance }: { orders: TransportOrder[]; onAdvance: (id: string) => void }) {
-  const assigned = orders.filter((order) => order.driverId === 'd1' && order.status !== 'verrechnet');
+function DriverView({
+  orders,
+  user,
+  onAdvance,
+}: {
+  orders: TransportOrder[];
+  user: AppUser;
+  onAdvance: (id: string) => void;
+}) {
+  const assigned = orders.filter((order) => (
+    order.driverId === user.driverId && order.status !== 'verrechnet'
+  ));
 
   return (
     <View style={styles.section}>
-      <Text style={styles.eyebrow}>RENÉ ROHNER · AKTUELLE AUFTRÄGE</Text>
+      <Text style={styles.eyebrow}>{user.displayName.toUpperCase()} · AKTUELLE AUFTRÄGE</Text>
       <Text style={styles.heading}>Meine Touren</Text>
       {assigned.map((order) => (
         <View key={order.id}>
@@ -334,6 +332,66 @@ function DriverView({ orders, onAdvance }: { orders: TransportOrder[]; onAdvance
         </View>
       ))}
       {assigned.length === 0 && <Text style={styles.empty}>Keine Aufträge zugeteilt.</Text>}
+    </View>
+  );
+}
+
+function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  function login() {
+    const user = authenticateDemoUser(username, password);
+    if (!user) {
+      setError('Benutzername oder Passwort ist falsch.');
+      return;
+    }
+    setError('');
+    onLogin(user);
+  }
+
+  return (
+    <View style={styles.loginPage}>
+      <View style={styles.loginCard}>
+        <Text style={styles.brand}>rohner ag</Text>
+        <Text style={styles.loginTitle}>Anmelden</Text>
+        <Text style={styles.loginSub}>Transportaufträge und Fuhrrapporte</Text>
+
+        <Text style={styles.fieldLabel}>Benutzername</Text>
+        <TextInput
+          autoCapitalize="none"
+          autoComplete="username"
+          style={styles.input}
+          value={username}
+          onChangeText={setUsername}
+          onSubmitEditing={login}
+        />
+
+        <Text style={styles.fieldLabel}>Passwort</Text>
+        <TextInput
+          autoCapitalize="none"
+          autoComplete="password"
+          secureTextEntry
+          style={styles.input}
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={login}
+        />
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <Pressable style={styles.loginButton} onPress={login}>
+          <Text style={styles.primaryButtonText}>Anmelden</Text>
+        </Pressable>
+
+        <View style={styles.demoBox}>
+          <Text style={styles.demoTitle}>Testzugänge</Text>
+          <Text style={styles.demoText}>Administrator: admin / demo</Text>
+          <Text style={styles.demoText}>Mitarbeiter: rene / demo</Text>
+          <Text style={styles.demoText}>Mitarbeiter: marcel / demo</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -401,6 +459,29 @@ function MasterDataView() {
   );
 }
 
+function UserManagementView() {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>ADMINISTRATION</Text>
+      <Text style={styles.heading}>Benutzer und Rechte</Text>
+      <Text style={styles.infoBox}>
+        Diese Konten sind vorläufige Testzugänge. Echte Passwörter werden später sicher auf dem Server gespeichert.
+      </Text>
+      {demoUsers.map((user) => (
+        <View key={user.id} style={styles.listRow}>
+          <View>
+            <Text style={styles.listTitle}>{user.displayName}</Text>
+            <Text style={styles.muted}>Benutzername: {user.username}</Text>
+          </View>
+          <Text style={user.role === 'admin' ? styles.adminLabel : styles.employeeLabel}>
+            {user.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SummaryBar({ orders }: { orders: TransportOrder[] }) {
   return (
     <View style={styles.stats}>
@@ -425,7 +506,7 @@ function SummaryBar({ orders }: { orders: TransportOrder[] }) {
 }
 
 export default function App() {
-  const [role, setRole] = useState<UserRole>('dispo');
+  const [currentUser, setCurrentUser] = useState<AppUser>();
   const [screen, setScreen] = useState<Screen>('calendar');
   const [orders, setOrders] = useState(initialOrders);
   const [message, setMessage] = useState('');
@@ -444,9 +525,15 @@ export default function App() {
     verrechnet: 'verrechnet',
   }), []);
 
-  function selectRole(nextRole: UserRole) {
-    setRole(nextRole);
-    setScreen(defaultScreen[nextRole]);
+  function login(user: AppUser) {
+    setCurrentUser(user);
+    setScreen(user.role === 'admin' ? 'calendar' : 'driver');
+    setMessage(`Willkommen, ${user.displayName}.`);
+  }
+
+  function logout() {
+    setCurrentUser(undefined);
+    setScreen('calendar');
     setMessage('');
   }
 
@@ -463,6 +550,17 @@ export default function App() {
     setMessage(`${order.orderNumber} wurde gespeichert und eingeplant.`);
   }
 
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="light" />
+        <LoginView onLogin={login} />
+      </SafeAreaView>
+    );
+  }
+
+  const isAdmin = currentUser.role === 'admin';
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -473,20 +571,18 @@ export default function App() {
               <Text style={styles.brand}>rohner ag</Text>
               <Text style={styles.brandSub}>Transporte · Disposition</Text>
             </View>
-            <View style={styles.roleSwitch}>
-              {(Object.keys(roleLabels) as UserRole[]).map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => selectRole(item)}
-                  style={[styles.roleButton, role === item && styles.roleActive]}
-                >
-                  <Text style={[styles.roleText, role === item && styles.roleTextActive]}>{roleLabels[item]}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.accountRow}>
+              <View>
+                <Text style={styles.accountName}>{currentUser.displayName}</Text>
+                <Text style={styles.accountRole}>{isAdmin ? 'Administrator' : 'Mitarbeiter'}</Text>
+              </View>
+              <Pressable onPress={logout} style={styles.logoutButton}>
+                <Text style={styles.logoutText}>Abmelden</Text>
+              </Pressable>
             </View>
           </View>
 
-          {role === 'dispo' && (
+          {isAdmin && (
             <View style={styles.subNavigation}>
               <Pressable onPress={() => setScreen('calendar')} style={[styles.navButton, screen === 'calendar' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'calendar' && styles.navTextActive]}>Kalender</Text>
@@ -497,6 +593,12 @@ export default function App() {
               <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
               </Pressable>
+              <Pressable onPress={() => setScreen('users')} style={[styles.navButton, screen === 'users' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'users' && styles.navTextActive]}>Benutzer</Text>
+              </Pressable>
+              <Pressable onPress={() => setScreen('billing')} style={[styles.navButton, screen === 'billing' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'billing' && styles.navTextActive]}>Verrechnung</Text>
+              </Pressable>
             </View>
           )}
 
@@ -506,17 +608,20 @@ export default function App() {
             </Pressable>
           ) : null}
 
-          <SummaryBar orders={orders} />
+          {isAdmin && <SummaryBar orders={orders} />}
 
-          {screen === 'calendar' && (
+          {isAdmin && screen === 'calendar' && (
             <DispositionView orders={orders} onNewOrder={() => setScreen('newOrder')} />
           )}
-          {screen === 'newOrder' && (
+          {isAdmin && screen === 'newOrder' && (
             <OrderForm onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
-          {screen === 'driver' && <DriverView orders={orders} onAdvance={advanceOrder} />}
-          {screen === 'billing' && <OfficeView orders={orders} />}
-          {screen === 'masterData' && <MasterDataView />}
+          {!isAdmin && screen === 'driver' && (
+            <DriverView orders={orders} user={currentUser} onAdvance={advanceOrder} />
+          )}
+          {isAdmin && screen === 'billing' && <OfficeView orders={orders} />}
+          {isAdmin && screen === 'masterData' && <MasterDataView />}
+          {isAdmin && screen === 'users' && <UserManagementView />}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -530,11 +635,11 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#0B4D27', paddingHorizontal: 24, paddingTop: 28, paddingBottom: 22, gap: 20 },
   brand: { color: '#FFD11A', fontSize: 30, fontWeight: '900', fontStyle: 'italic' },
   brandSub: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  roleSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  roleButton: { borderWidth: 1, borderColor: '#6EA680', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
-  roleActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-  roleText: { color: '#FFFFFF', fontWeight: '700' },
-  roleTextActive: { color: '#0B4D27' },
+  accountRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  accountName: { color: '#FFFFFF', fontWeight: '800' },
+  accountRole: { color: '#BBD7C3', marginTop: 2, fontSize: 12 },
+  logoutButton: { borderWidth: 1, borderColor: '#8FBA9B', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  logoutText: { color: '#FFFFFF', fontWeight: '700' },
   subNavigation: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 18, paddingTop: 16 },
   navButton: { borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#E7ECE8' },
   navButtonActive: { backgroundColor: '#0B4D27' },
@@ -588,4 +693,16 @@ const styles = StyleSheet.create({
   listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8E2', padding: 14 },
   listTitle: { color: '#142018', fontWeight: '800' },
   activeLabel: { color: '#0B4D27', fontSize: 12, fontWeight: '800' },
+  adminLabel: { color: '#0B4D27', backgroundColor: '#E4F2E8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: '800' },
+  employeeLabel: { color: '#34443A', backgroundColor: '#EEF2EE', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: '800' },
+  infoBox: { color: '#34443A', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginBottom: 12, lineHeight: 20 },
+  loginPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B4D27', padding: 20 },
+  loginCard: { width: '100%', maxWidth: 440, backgroundColor: '#F4F7F4', borderRadius: 18, padding: 24 },
+  loginTitle: { color: '#142018', fontSize: 28, fontWeight: '900', marginTop: 18 },
+  loginSub: { color: '#607066', marginTop: 4, marginBottom: 8 },
+  loginButton: { backgroundColor: '#0B4D27', borderRadius: 11, padding: 15, alignItems: 'center', marginTop: 18 },
+  errorText: { color: '#B42318', marginTop: 10, fontWeight: '700' },
+  demoBox: { backgroundColor: '#E7ECE8', borderRadius: 10, padding: 13, marginTop: 18 },
+  demoTitle: { color: '#27362C', fontWeight: '800', marginBottom: 5 },
+  demoText: { color: '#536158', marginTop: 3 },
 });
