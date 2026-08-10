@@ -72,6 +72,13 @@ function lookup<T extends { id: string }>(items: T[], id?: string): T | undefine
   return id ? items.find((item) => item.id === id) : undefined;
 }
 
+function openMapUrl(url: string) {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) return;
+  const completeUrl = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
+  Linking.openURL(completeUrl);
+}
+
 function ChoiceRow<T extends string>({
   options,
   selected,
@@ -145,6 +152,20 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
       <Text style={styles.cardTitle}>{order.title}</Text>
       <Text style={styles.muted}>{project?.customerName} · {project?.name}</Text>
       <Text style={styles.route}>{order.pickup} → {order.delivery}</Text>
+      {!compact && (order.pickupMapUrl || order.deliveryMapUrl) ? (
+        <View style={styles.locationLinks}>
+          {order.pickupMapUrl ? (
+            <Pressable style={styles.locationLinkButton} onPress={() => openMapUrl(order.pickupMapUrl!)}>
+              <Text style={styles.locationLinkText}>📍 Ladeort in Google Maps</Text>
+            </Pressable>
+          ) : null}
+          {order.deliveryMapUrl ? (
+            <Pressable style={styles.locationLinkButton} onPress={() => openMapUrl(order.deliveryMapUrl!)}>
+              <Text style={styles.locationLinkText}>📍 Abladeort in Google Maps</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {!compact && <Text style={styles.description}>{order.description}</Text>}
       <View style={styles.tags}>
         <Text style={styles.tag}>{order.timeWindow}</Text>
@@ -303,7 +324,9 @@ function OrderForm({
   const [timeWindow, setTimeWindow] = useState('07:00–17:00');
   const [title, setTitle] = useState('Neuer Transportauftrag');
   const [pickup, setPickup] = useState('Abholort');
+  const [pickupMapUrl, setPickupMapUrl] = useState('');
   const [delivery, setDelivery] = useState('Abladeort');
+  const [deliveryMapUrl, setDeliveryMapUrl] = useState('');
   const [description, setDescription] = useState('Bemerkungen zum Auftrag');
   const [driverId, setDriverId] = useState(activeDrivers[0]?.id ?? '');
   const [vehicleId, setVehicleId] = useState(activeVehicles[0]?.id ?? '');
@@ -323,7 +346,9 @@ function OrderForm({
       date: date.trim(),
       timeWindow: timeWindow.trim(),
       pickup: pickup.trim(),
+      pickupMapUrl: pickupMapUrl.trim() || undefined,
       delivery: delivery.trim(),
+      deliveryMapUrl: deliveryMapUrl.trim() || undefined,
       description: description.trim(),
       driverId,
       vehicleId,
@@ -379,12 +404,32 @@ function OrderForm({
 
       <View style={styles.formGrid}>
         <View style={styles.formField}>
-          <Text style={styles.fieldLabel}>Abholort</Text>
-          <TextInput style={styles.input} value={pickup} onChangeText={setPickup} />
+          <Text style={styles.fieldLabel}>Ladeort / Beschreibung</Text>
+          <TextInput style={styles.input} value={pickup} onChangeText={setPickup} placeholder="z. B. Werkhof, Halle 3" />
+          <Text style={styles.fieldLabel}>Google-Maps-Link Ladeort</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.input}
+            value={pickupMapUrl}
+            onChangeText={setPickupMapUrl}
+            placeholder="Google-Maps-Link einfügen"
+          />
         </View>
         <View style={styles.formField}>
-          <Text style={styles.fieldLabel}>Abladeort</Text>
-          <TextInput style={styles.input} value={delivery} onChangeText={setDelivery} />
+          <Text style={styles.fieldLabel}>Abladeort / Beschreibung</Text>
+          <TextInput style={styles.input} value={delivery} onChangeText={setDelivery} placeholder="z. B. Baustelle, Einfahrt Süd" />
+          <Text style={styles.fieldLabel}>Google-Maps-Link Abladeort</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.input}
+            value={deliveryMapUrl}
+            onChangeText={setDeliveryMapUrl}
+            placeholder="Google-Maps-Link einfügen"
+          />
         </View>
       </View>
 
@@ -1129,6 +1174,9 @@ const styles = StyleSheet.create({
   cardTitle: { color: '#142018', fontSize: 17, fontWeight: '900', marginTop: 6 },
   muted: { color: '#6A756D', marginTop: 3 },
   route: { color: '#142018', fontWeight: '700', marginTop: 10 },
+  locationLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  locationLinkButton: { borderWidth: 1, borderColor: '#0B4D27', backgroundColor: '#F4FAF6', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9 },
+  locationLinkText: { color: '#0B4D27', fontSize: 12, fontWeight: '800' },
   description: { color: '#445049', marginTop: 7, lineHeight: 20 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
   tag: { color: '#445049', backgroundColor: '#EEF2EE', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, fontSize: 12, fontWeight: '600' },

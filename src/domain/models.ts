@@ -108,7 +108,9 @@ export interface TransportOrder {
   date: string;
   timeWindow: string;
   pickup: string;
+  pickupMapUrl?: string;
   delivery: string;
+  deliveryMapUrl?: string;
   description: string;
   driverId?: string;
   vehicleId?: string;

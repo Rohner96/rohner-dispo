@@ -7,6 +7,7 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Rollenansichten für Disposition, Chauffeur und Sekretariat
 - Dispositionskalender mit Demoaufträgen
 - vollständig bedienbare Auftragserfassung
+- separate Google-Maps-Links für Ladeort und Abladeort
 - Zuteilung von Kunde/Projekt, Transportart, Chauffeur, LKW und Anhänger
 - flexible Auswahl der Verrechnungsart
 - neue Aufträge erscheinen sofort im Kalender
@@ -18,7 +19,14 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.6.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.7.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.7.0:
+
+- freie Beschreibung für Ladeort und Abladeort bleibt bestehen
+- eigener Google-Maps-Link direkt unter jedem der beiden Orte
+- separate Schaltflächen zum Öffnen des Lade- und Abladeorts
+- bisherige Routenplanung für die komplette Fahrt bleibt erhalten
 
 Neu in Version 0.6.0:
 
