@@ -16,8 +16,8 @@ test('formatiert Schweizer Franken', () => {
   assert.equal(formatChf(1450), 'CHF 1450.00');
 });
 
-test('nimmt nur abgeschlossene Leistungen in den Verrechnungspool', () => {
-  const finished = initialOrders.map((order, index) => index === 0 ? { ...order, status: 'kontrolliert' as const } : order);
+test('nimmt nur durch Administrator freigegebene Leistungen in den Verrechnungspool', () => {
+  const finished = initialOrders.map((order, index) => index === 0 ? { ...order, status: 'verrechenbar' as const } : order);
   const pool = buildBillingPool(finished, projects);
   assert.equal(pool.length, 1);
   assert.equal(pool[0]!.order.orderNumber, 'A-2026-001');

@@ -29,6 +29,33 @@ export type BillingMode =
   | 'kilometer'
   | 'kombiniert';
 
+export type WorkflowStep =
+  | 'zugeteilt'
+  | 'angenommen'
+  | 'beladung_gestartet'
+  | 'beladung_beendet'
+  | 'unterwegs'
+  | 'angekommen'
+  | 'entladung_gestartet'
+  | 'entladung_beendet'
+  | 'abgeschlossen';
+
+export interface WorkflowEvent {
+  step: WorkflowStep;
+  at: string;
+}
+
+export type AbsenceType = 'ferien' | 'krank' | 'kompensation' | 'urlaub';
+
+export interface Absence {
+  id: string;
+  driverId: string;
+  type: AbsenceType;
+  from: string;
+  to: string;
+  note?: string;
+}
+
 export interface Vehicle {
   id: string;
   internalNumber: string;
@@ -62,6 +89,8 @@ export interface TransportOrder {
   orderNumber: string;
   type: OrderType;
   status: OrderStatus;
+  workflowStep: WorkflowStep;
+  workflowEvents: WorkflowEvent[];
   projectId: string;
   title: string;
   date: string;

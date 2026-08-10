@@ -1,6 +1,6 @@
 import { BillingCandidate, Project, TransportOrder } from '../domain/models';
 
-const billableStatuses = new Set(['abgeschlossen', 'kontrolliert', 'verrechenbar']);
+const billableStatuses = new Set(['verrechenbar']);
 
 export function calculateOrderAmount(order: TransportOrder): number | undefined {
   if (order.billingMode === 'pauschal') return order.rate;

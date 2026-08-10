@@ -1,4 +1,4 @@
-import { Driver, Project, Trailer, TransportOrder, Vehicle } from '../domain/models';
+import { Absence, Driver, Project, Trailer, TransportOrder, Vehicle } from '../domain/models';
 
 export const drivers: Driver[] = [
   { id: 'd1', name: 'René Rohner', active: true },
@@ -23,12 +23,20 @@ export const projects: Project[] = [
   { id: 'p3', customerName: 'Muster Bau AG', name: 'Baumaschinentransport' },
 ];
 
+export const absences: Absence[] = [
+  { id: 'a1', driverId: 'd3', type: 'ferien', from: '2026-08-10', to: '2026-08-14', note: 'Ferien' },
+  { id: 'a2', driverId: 'd2', type: 'kompensation', from: '2026-08-13', to: '2026-08-13', note: 'Kompensation' },
+  { id: 'a3', driverId: 'd1', type: 'urlaub', from: '2026-08-14', to: '2026-08-14', note: 'Urlaub halber Tag' },
+];
+
 export const initialOrders: TransportOrder[] = [
   {
     id: 'o1',
     orderNumber: 'A-2026-001',
     type: 'kran',
     status: 'zugeteilt',
+    workflowStep: 'zugeteilt',
+    workflowEvents: [],
     projectId: 'p1',
     title: 'Leitschranken abräumen',
     date: '2026-08-11',
@@ -49,6 +57,8 @@ export const initialOrders: TransportOrder[] = [
     orderNumber: 'A-2026-002',
     type: 'kipper',
     status: 'unterwegs',
+    workflowStep: 'unterwegs',
+    workflowEvents: [],
     projectId: 'p2',
     title: 'Aushub abführen',
     date: '2026-08-11',
@@ -70,6 +80,8 @@ export const initialOrders: TransportOrder[] = [
     orderNumber: 'A-2026-003',
     type: 'tieflader',
     status: 'provisorisch',
+    workflowStep: 'zugeteilt',
+    workflowEvents: [],
     projectId: 'p3',
     title: 'Bagger transportieren',
     date: '2026-08-12',

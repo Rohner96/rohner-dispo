@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -9,32 +9,21 @@ import {
   TextInput,
   View,
   Image,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 
-import { drivers, initialOrders, projects, trailers, vehicles } from './src/data/demoData';
+import { absences, drivers, initialOrders, projects, trailers, vehicles } from './src/data/demoData';
 import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
-  OrderStatus,
   OrderType,
   TransportOrder,
 } from './src/domain/models';
 import { buildBillingPool, formatChf } from './src/lib/billing';
+import { isWorkflowFinished, nextWorkflowAction, nextWorkflowStep, workflowLabels } from './src/lib/workflow';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'billing' | 'masterData' | 'users';
-
-const statusLabels: Record<OrderStatus, string> = {
-  anfrage: 'Anfrage',
-  provisorisch: 'Provisorisch',
-  bestaetigt: 'Bestätigt',
-  zugeteilt: 'Zugeordnet',
-  unterwegs: 'Unterwegs',
-  abgeschlossen: 'Abgeschlossen',
-  kontrolliert: 'Kontrolliert',
-  verrechenbar: 'Verrechenbar',
-  verrechnet: 'Verrechnet',
-};
 
 const typeLabels: Record<OrderType, string> = {
   kipper: 'Kipper',
@@ -106,7 +95,7 @@ function OrderCard({ order, compact = false }: { order: TransportOrder; compact?
     <View style={[styles.card, { borderLeftColor: typeColors[order.type] }]}>
       <View style={styles.cardTopline}>
         <Text style={styles.orderNumber}>{order.orderNumber} · {typeLabels[order.type]}</Text>
-        <Text style={styles.status}>{statusLabels[order.status]}</Text>
+        <Text style={styles.status}>{workflowLabels[order.workflowStep]}</Text>
       </View>
       <Text style={styles.cardTitle}>{order.title}</Text>
       <Text style={styles.muted}>{project?.customerName} · {project?.name}</Text>
@@ -122,6 +111,21 @@ function OrderCard({ order, compact = false }: { order: TransportOrder; compact?
   );
 }
 
+const absenceLabels = {
+  ferien: 'Ferien',
+  krank: 'Krank',
+  kompensation: 'Kompensation',
+  urlaub: 'Urlaub',
+};
+
+const weekDays = [
+  { date: '2026-08-10', label: 'Mo 10.8.' },
+  { date: '2026-08-11', label: 'Di 11.8.' },
+  { date: '2026-08-12', label: 'Mi 12.8.' },
+  { date: '2026-08-13', label: 'Do 13.8.' },
+  { date: '2026-08-14', label: 'Fr 14.8.' },
+];
+
 function DispositionView({
   orders,
   onNewOrder,
@@ -129,27 +133,76 @@ function DispositionView({
   orders: TransportOrder[];
   onNewOrder: () => void;
 }) {
+  const [calendarMode, setCalendarMode] = useState<'week' | 'list'>('week');
   const dates = [...new Set(orders.map((order) => order.date))].sort();
 
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeading}>
         <View style={styles.headingBlock}>
-          <Text style={styles.eyebrow}>OPERATIVE PLANUNG</Text>
-          <Text style={styles.heading}>Dispositionskalender</Text>
+          <Text style={styles.eyebrow}>AUFTRÄGE & PERSONAL</Text>
+          <Text style={styles.heading}>Wochenkalender</Text>
         </View>
         <Pressable style={styles.primaryButton} onPress={onNewOrder}>
           <Text style={styles.primaryButtonText}>+ Auftrag</Text>
         </Pressable>
       </View>
-      {dates.map((date) => (
-        <View key={date} style={styles.dayBlock}>
-          <Text style={styles.dayTitle}>{date}</Text>
-          {orders.filter((order) => order.date === date).map((order) => (
-            <OrderCard key={order.id} order={order} compact />
-          ))}
-        </View>
-      ))}
+      <View style={styles.calendarSwitch}>
+        <Pressable onPress={() => setCalendarMode('week')} style={[styles.navButton, calendarMode === 'week' && styles.navButtonActive]}>
+          <Text style={[styles.navText, calendarMode === 'week' && styles.navTextActive]}>Woche</Text>
+        </Pressable>
+        <Pressable onPress={() => setCalendarMode('list')} style={[styles.navButton, calendarMode === 'list' && styles.navButtonActive]}>
+          <Text style={[styles.navText, calendarMode === 'list' && styles.navTextActive]}>Liste</Text>
+        </Pressable>
+      </View>
+
+      {calendarMode === 'week' ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={styles.weekBoard}>
+            {weekDays.map((day) => {
+              const dayOrders = orders.filter((order) => order.date === day.date);
+              const dayAbsences = absences.filter((absence) => day.date >= absence.from && day.date <= absence.to);
+              return (
+                <View key={day.date} style={styles.weekColumn}>
+                  <Text style={styles.weekDay}>{day.label}</Text>
+                  {dayOrders.map((order) => {
+                    const driver = lookup(drivers, order.driverId);
+                    const project = lookup(projects, order.projectId);
+                    return (
+                      <View key={order.id} style={[styles.calendarOrder, { borderLeftColor: typeColors[order.type] }]}>
+                        <Text style={styles.calendarTime}>{order.timeWindow}</Text>
+                        <Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text>
+                        <Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text>
+                      </View>
+                    );
+                  })}
+                  {dayAbsences.map((absence) => {
+                    const driver = lookup(drivers, absence.driverId);
+                    return (
+                      <View key={`${absence.id}-${day.date}`} style={styles.calendarAbsence}>
+                        <Text style={styles.calendarTitle}>{driver?.name}</Text>
+                        <Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text>
+                      </View>
+                    );
+                  })}
+                  {dayOrders.length === 0 && dayAbsences.length === 0 && (
+                    <Text style={styles.calendarEmpty}>Noch frei</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      ) : (
+        dates.map((date) => (
+          <View key={date} style={styles.dayBlock}>
+            <Text style={styles.dayTitle}>{date}</Text>
+            {orders.filter((order) => order.date === date).map((order) => (
+              <OrderCard key={order.id} order={order} compact />
+            ))}
+          </View>
+        ))
+      )}
     </View>
   );
 }
@@ -181,6 +234,8 @@ function OrderForm({
       orderNumber: number,
       type,
       status: 'zugeteilt',
+      workflowStep: 'zugeteilt',
+      workflowEvents: [],
       projectId,
       title: title.trim() || 'Transportauftrag',
       date: date.trim(),
@@ -323,13 +378,33 @@ function DriverView({
       {assigned.map((order) => (
         <View key={order.id}>
           <OrderCard order={order} />
-          <Pressable
-            disabled={order.status === 'verrechnet'}
-            style={styles.actionButton}
-            onPress={() => onAdvance(order.id)}
-          >
-            <Text style={styles.actionButtonText}>Nächsten Status melden</Text>
-          </Pressable>
+          <View style={styles.driverActions}>
+            <Pressable
+              style={styles.mapButton}
+              onPress={() => Linking.openURL(
+                `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(order.pickup)}&destination=${encodeURIComponent(order.delivery)}&travelmode=driving`,
+              )}
+            >
+              <Text style={styles.mapButtonText}>Route mit Google Maps</Text>
+            </Pressable>
+            <Pressable
+              disabled={isWorkflowFinished(order.workflowStep)}
+              style={[styles.actionButton, isWorkflowFinished(order.workflowStep) && styles.disabledButton]}
+              onPress={() => onAdvance(order.id)}
+            >
+              <Text style={styles.actionButtonText}>{nextWorkflowAction(order.workflowStep)}</Text>
+            </Pressable>
+          </View>
+          {order.workflowEvents.length > 0 && (
+            <View style={styles.timeline}>
+              {order.workflowEvents.map((event, index) => (
+                <View key={`${event.step}-${index}`} style={styles.timelineRow}>
+                  <Text style={styles.timelineLabel}>{workflowLabels[event.step]}</Text>
+                  <Text style={styles.timelineTime}>{new Date(event.at).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       ))}
       {assigned.length === 0 && <Text style={styles.empty}>Keine Aufträge zugeteilt.</Text>}
@@ -403,13 +478,40 @@ function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
   );
 }
 
-function OfficeView({ orders }: { orders: TransportOrder[] }) {
+function OfficeView({
+  orders,
+  onRelease,
+}: {
+  orders: TransportOrder[];
+  onRelease: (id: string) => void;
+}) {
   const candidates = buildBillingPool(orders, projects);
+  const awaitingRelease = orders.filter((order) => order.status === 'abgeschlossen');
 
   return (
     <View style={styles.section}>
       <Text style={styles.eyebrow}>KONTROLLE & VERRECHNUNG</Text>
-      <Text style={styles.heading}>Unverrechnete Leistungen</Text>
+      <Text style={styles.heading}>Freigabe durch Administration</Text>
+      {awaitingRelease.map((order) => {
+        const project = lookup(projects, order.projectId);
+        return (
+          <View key={order.id} style={styles.billingRow}>
+            <View style={styles.billingMain}>
+              <Text style={styles.cardTitle}>{project?.customerName}</Text>
+              <Text style={styles.muted}>{order.orderNumber} · {order.title}</Text>
+              <Text style={styles.description}>Vom Chauffeur abgeschlossen</Text>
+            </View>
+            <Pressable style={styles.releaseButton} onPress={() => onRelease(order.id)}>
+              <Text style={styles.primaryButtonText}>Zur Verrechnung freigeben</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+      {awaitingRelease.length === 0 && (
+        <Text style={styles.empty}>Keine abgeschlossenen Aufträge warten auf Freigabe.</Text>
+      )}
+
+      <Text style={styles.listHeading}>Freigegebene Leistungen</Text>
       {candidates.map(({ order, project, amount }) => (
         <View key={order.id} style={styles.billingRow}>
           <View style={styles.billingMain}>
@@ -421,7 +523,7 @@ function OfficeView({ orders }: { orders: TransportOrder[] }) {
         </View>
       ))}
       {candidates.length === 0 && (
-        <Text style={styles.empty}>Noch keine kontrollierten Leistungen zur Verrechnung.</Text>
+        <Text style={styles.empty}>Noch keine Leistungen zur Verrechnung freigegeben.</Text>
       )}
     </View>
   );
@@ -520,18 +622,6 @@ export default function App() {
   const { width } = useWindowDimensions();
   const maxWidth = width > 1100 ? 1040 : width;
 
-  const nextStatus = useMemo<Record<OrderStatus, OrderStatus>>(() => ({
-    anfrage: 'provisorisch',
-    provisorisch: 'bestaetigt',
-    bestaetigt: 'zugeteilt',
-    zugeteilt: 'unterwegs',
-    unterwegs: 'abgeschlossen',
-    abgeschlossen: 'kontrolliert',
-    kontrolliert: 'verrechenbar',
-    verrechenbar: 'verrechnet',
-    verrechnet: 'verrechnet',
-  }), []);
-
   function login(user: AppUser) {
     setCurrentUser(user);
     setScreen(user.role === 'admin' ? 'calendar' : 'driver');
@@ -545,10 +635,29 @@ export default function App() {
   }
 
   function advanceOrder(id: string) {
-    setOrders((current) => current.map((order) => (
-      order.id === id ? { ...order, status: nextStatus[order.status] } : order
-    )));
+    setOrders((current) => current.map((order) => {
+      if (order.id !== id) return order;
+      const step = nextWorkflowStep(order.workflowStep);
+      const status = step === 'abgeschlossen'
+        ? 'abgeschlossen'
+        : ['unterwegs', 'angekommen', 'entladung_gestartet', 'entladung_beendet'].includes(step)
+          ? 'unterwegs'
+          : 'zugeteilt';
+      return {
+        ...order,
+        workflowStep: step,
+        workflowEvents: [...order.workflowEvents, { step, at: new Date().toISOString() }],
+        status,
+      };
+    }));
     setMessage('Status wurde aktualisiert.');
+  }
+
+  function releaseForBilling(id: string) {
+    setOrders((current) => current.map((order) => (
+      order.id === id ? { ...order, status: 'verrechenbar' } : order
+    )));
+    setMessage('Auftrag wurde zur Verrechnung freigegeben.');
   }
 
   function saveOrder(order: TransportOrder) {
@@ -574,26 +683,26 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <View style={[styles.container, { maxWidth }]}>
           <View style={styles.header}>
-            <View style={styles.headerBrand}>
-              <View style={styles.headerLogoSurface}>
-                <Image
-                  source={require('./assets/rohner-logo.png')}
-                  style={styles.headerLogo}
-                  resizeMode="contain"
-                  accessibilityLabel="Rohner AG Transporte"
-                />
-              </View>
-              <Text style={styles.brandSub}>Kommunikationsapp</Text>
-            </View>
-            <View style={styles.accountRow}>
+            <View style={styles.headerTop}>
               <View>
                 <Text style={styles.accountName}>{currentUser.displayName}</Text>
                 <Text style={styles.accountRole}>{isAdmin ? 'Administrator' : 'Mitarbeiter'}</Text>
               </View>
-              <Pressable onPress={logout} style={styles.logoutButton}>
-                <Text style={styles.logoutText}>Abmelden</Text>
-              </Pressable>
+              <View style={styles.headerBrand}>
+                <View style={styles.headerLogoSurface}>
+                  <Image
+                    source={require('./assets/rohner-logo.png')}
+                    style={styles.headerLogo}
+                    resizeMode="contain"
+                    accessibilityLabel="Rohner AG Transporte"
+                  />
+                </View>
+                <Text style={styles.brandSub}>Kommunikationsapp</Text>
+              </View>
             </View>
+            <Pressable onPress={logout} style={styles.logoutButton}>
+              <Text style={styles.logoutText}>Abmelden</Text>
+            </Pressable>
           </View>
 
           {isAdmin && (
@@ -633,7 +742,9 @@ export default function App() {
           {!isAdmin && screen === 'driver' && (
             <DriverView orders={orders} user={currentUser} onAdvance={advanceOrder} />
           )}
-          {isAdmin && screen === 'billing' && <OfficeView orders={orders} />}
+          {isAdmin && screen === 'billing' && (
+            <OfficeView orders={orders} onRelease={releaseForBilling} />
+          )}
           {isAdmin && screen === 'masterData' && <MasterDataView />}
           {isAdmin && screen === 'users' && <UserManagementView />}
         </View>
@@ -646,15 +757,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#07130B' },
   page: { flexGrow: 1, alignItems: 'center', backgroundColor: '#F4F7F4' },
   container: { width: '100%' },
-  header: { backgroundColor: '#0B4D27', paddingHorizontal: 24, paddingTop: 28, paddingBottom: 22, gap: 20 },
-  brandSub: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  headerBrand: { width: '100%', maxWidth: 340 },
-  headerLogoSurface: { backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 },
-  headerLogo: { width: '100%', height: 58 },
-  accountRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  header: { backgroundColor: '#0B4D27', paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18, gap: 12 },
+  headerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  brandSub: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'right', marginTop: 4 },
+  headerBrand: { width: 230, maxWidth: '58%', alignItems: 'flex-end' },
+  headerLogoSurface: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
+  headerLogo: { width: '100%', height: 38 },
   accountName: { color: '#FFFFFF', fontWeight: '800' },
   accountRole: { color: '#BBD7C3', marginTop: 2, fontSize: 12 },
-  logoutButton: { borderWidth: 1, borderColor: '#8FBA9B', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  logoutButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#8FBA9B', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
   logoutText: { color: '#FFFFFF', fontWeight: '700' },
   subNavigation: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 18, paddingTop: 16 },
   navButton: { borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#E7ECE8' },
@@ -678,6 +789,16 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: '#34443A', fontWeight: '800' },
   dayBlock: { marginBottom: 20 },
   dayTitle: { fontSize: 15, color: '#4B5B50', fontWeight: '800', marginBottom: 8 },
+  calendarSwitch: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  weekBoard: { flexDirection: 'row', gap: 10, paddingBottom: 12 },
+  weekColumn: { width: 210, minHeight: 250, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E0E6E1', padding: 11 },
+  weekDay: { color: '#0B4D27', fontWeight: '900', marginBottom: 10 },
+  calendarOrder: { borderLeftWidth: 5, backgroundColor: '#F4F7F4', borderRadius: 8, padding: 9, marginBottom: 8 },
+  calendarAbsence: { backgroundColor: '#FFF5C7', borderRadius: 8, padding: 9, marginBottom: 8 },
+  calendarTime: { color: '#59675E', fontSize: 11, fontWeight: '700' },
+  calendarTitle: { color: '#142018', fontWeight: '900', marginTop: 3 },
+  calendarMeta: { color: '#66736A', fontSize: 12, marginTop: 3 },
+  calendarEmpty: { color: '#8A958D', textAlign: 'center', marginTop: 26 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 14, borderLeftWidth: 6, padding: 16, marginBottom: 10, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   cardTopline: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   orderNumber: { color: '#66736A', fontSize: 12, fontWeight: '700', flexShrink: 1 },
@@ -688,11 +809,20 @@ const styles = StyleSheet.create({
   description: { color: '#445049', marginTop: 7, lineHeight: 20 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 },
   tag: { color: '#445049', backgroundColor: '#EEF2EE', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, fontSize: 12, fontWeight: '600' },
-  actionButton: { backgroundColor: '#FFD11A', borderRadius: 11, padding: 14, alignItems: 'center', marginTop: -2, marginBottom: 18 },
+  driverActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginBottom: 10 },
+  actionButton: { flexGrow: 1, backgroundColor: '#FFD11A', borderRadius: 11, padding: 14, alignItems: 'center' },
   actionButtonText: { color: '#17331F', fontWeight: '900' },
+  disabledButton: { opacity: 0.45 },
+  mapButton: { flexGrow: 1, borderWidth: 1, borderColor: '#0B4D27', borderRadius: 11, padding: 13, alignItems: 'center' },
+  mapButtonText: { color: '#0B4D27', fontWeight: '900' },
+  timeline: { backgroundColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: 12, marginBottom: 20 },
+  timelineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#E7ECE8' },
+  timelineLabel: { color: '#34443A', flex: 1 },
+  timelineTime: { color: '#66736A', fontWeight: '700' },
   billingRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10, gap: 12, borderWidth: 1, borderColor: '#E2E8E2' },
   billingMain: { flex: 1 },
   amount: { color: '#0B4D27', fontWeight: '900' },
+  releaseButton: { backgroundColor: '#0B4D27', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10 },
   empty: { color: '#6A756D', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 18 },
   fieldLabel: { color: '#27362C', fontWeight: '800', marginTop: 14, marginBottom: 7 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -714,8 +844,8 @@ const styles = StyleSheet.create({
   infoBox: { color: '#34443A', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginBottom: 12, lineHeight: 20 },
   loginPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B4D27', padding: 20 },
   loginCard: { width: '100%', maxWidth: 440, backgroundColor: '#F4F7F4', borderRadius: 18, padding: 24 },
-  loginLogo: { width: '100%', height: 78 },
-  loginAppName: { color: '#0B4D27', textAlign: 'center', fontSize: 16, fontWeight: '800', marginTop: 8 },
+  loginLogo: { alignSelf: 'flex-end', width: 250, maxWidth: '78%', height: 52 },
+  loginAppName: { color: '#0B4D27', textAlign: 'right', fontSize: 15, fontWeight: '800', marginTop: 6 },
   loginTitle: { color: '#142018', fontSize: 28, fontWeight: '900', marginTop: 18 },
   loginSub: { color: '#607066', marginTop: 4, marginBottom: 8 },
   loginButton: { backgroundColor: '#0B4D27', borderRadius: 11, padding: 15, alignItems: 'center', marginTop: 18 },
