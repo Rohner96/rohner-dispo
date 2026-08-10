@@ -1,0 +1,85 @@
+import { Driver, Project, Trailer, TransportOrder, Vehicle } from '../domain/models';
+
+export const drivers: Driver[] = [
+  { id: 'd1', name: 'René Rohner', active: true },
+  { id: 'd2', name: 'Marcel Muster', active: true },
+  { id: 'd3', name: 'André Beispiel', active: true },
+];
+
+export const vehicles: Vehicle[] = [
+  { id: 'v1', internalNumber: 'LKW 01', label: 'Kipper 5-Achser', category: 'kipper', active: true },
+  { id: 'v2', internalNumber: 'LKW 07', label: 'LKW-Kran 30 m/t', category: 'kran', active: true },
+  { id: 'v3', internalNumber: 'LKW 12', label: 'Sattelschlepper', category: 'tieflader', active: true },
+];
+
+export const trailers: Trailer[] = [
+  { id: 't1', internalNumber: 'ANH 04', label: 'Tandem-Kippanhänger', active: true },
+  { id: 't2', internalNumber: 'TL 02', label: 'Tieflader', active: true },
+];
+
+export const projects: Project[] = [
+  { id: 'p1', customerName: 'Greuter AG', projectNumber: '10725538', name: 'Baustelle LUWA' },
+  { id: 'p2', customerName: 'Kibag', name: 'Aushub Baustelle Nord' },
+  { id: 'p3', customerName: 'Muster Bau AG', name: 'Baumaschinentransport' },
+];
+
+export const initialOrders: TransportOrder[] = [
+  {
+    id: 'o1',
+    orderNumber: 'A-2026-001',
+    type: 'kran',
+    status: 'zugeteilt',
+    projectId: 'p1',
+    title: 'Leitschranken abräumen',
+    date: '2026-08-11',
+    timeWindow: '07:00–16:00',
+    pickup: 'Baustelle FB Zürich',
+    delivery: 'Industriepark Wangen',
+    description: '216 m Meton und 168 m Convico abräumen.',
+    driverId: 'd1',
+    vehicleId: 'v2',
+    billingMode: 'stunde',
+    quantity: 9,
+    unit: 'h',
+    rate: 245,
+    reportNumber: '37199',
+  },
+  {
+    id: 'o2',
+    orderNumber: 'A-2026-002',
+    type: 'kipper',
+    status: 'unterwegs',
+    projectId: 'p2',
+    title: 'Aushub abführen',
+    date: '2026-08-11',
+    timeWindow: '06:30–17:00',
+    pickup: 'Baustelle Nord',
+    delivery: 'Deponie',
+    description: 'Mehrfachfuhren; Zielmenge 180 t.',
+    driverId: 'd2',
+    vehicleId: 'v1',
+    trailerId: 't1',
+    billingMode: 'tonne',
+    quantity: 124,
+    unit: 't',
+    rate: 13.5,
+    reportNumber: '37204',
+  },
+  {
+    id: 'o3',
+    orderNumber: 'A-2026-003',
+    type: 'tieflader',
+    status: 'provisorisch',
+    projectId: 'p3',
+    title: 'Bagger transportieren',
+    date: '2026-08-12',
+    timeWindow: '08:00–11:00',
+    pickup: 'Werkhof Baden',
+    delivery: 'Baustelle Siglistorf',
+    description: 'Maschinengewicht und Abmessungen noch bestätigen.',
+    vehicleId: 'v3',
+    trailerId: 't2',
+    billingMode: 'pauschal',
+    rate: 1450,
+  },
+];
