@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Rohner Dispo",
+    "slug": "rohner-dispo",
+    "version": "0.2.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ch.rohner-transport.dispo"
+    },
+    "android": {
+      "package": "ch.rohner_transport.dispo"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "experiments": {
+      "baseUrl": "/rohner-dispo"
+    }
+  }
+}
