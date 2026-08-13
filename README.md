@@ -23,7 +23,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.12.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.13.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.13.0:
+
+- Kalendereinträge für Aufträge, Abwesenheiten und Werkstatttermine anklickbar
+- Detailansicht direkt im Kalender
+- von einer Abwesenheit zur Abwesenheitsverwaltung wechseln
+- von einem Werkstatttermin zum Reparaturfall wechseln
+- Aufträge in der Tagesansicht stundenweise vor- und zurückverschieben
+- Aufträge in der Wochenansicht tageweise vor- und zurückverschieben
+- Datum und Zeit werden nach der Verschiebung sofort im Kalender aktualisiert
 
 Neu in Version 0.12.0:
 

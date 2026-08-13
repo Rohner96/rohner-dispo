@@ -49,6 +49,7 @@ import { activeOnly, defaultAssignmentForDriver, projectsForCustomer } from './s
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 import { filterDrivers, isValidAbsenceRange } from './src/lib/absences';
 import { CalendarMode, calendarPeriodLabel, dayLabel, monthDateKeys, shiftCalendarDate, toDateKey, weekDateKeys } from './src/lib/calendar';
+import { shiftOrderByDays, shiftOrderByHours } from './src/lib/orderScheduling';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
 
@@ -261,7 +262,9 @@ const absenceLabels = {
   unfall: 'Unfall',
 } satisfies Record<AbsenceType, string>;
 
-function CalendarDay({ date, orders, absencesData, repairs, projectsData, driversData, vehiclesData, mode }: { date: string; orders: TransportOrder[]; absencesData: Absence[]; repairs: RepairCase[]; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; mode: 'day' | 'week' | 'month' }) {
+type CalendarSelection = { kind: 'order' | 'absence' | 'repair'; id: string };
+
+function CalendarDay({ date, orders, absencesData, repairs, projectsData, driversData, vehiclesData, mode, onSelect }: { date: string; orders: TransportOrder[]; absencesData: Absence[]; repairs: RepairCase[]; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; mode: 'day' | 'week' | 'month'; onSelect: (selection: CalendarSelection) => void }) {
   const dayOrders = orders.filter((order) => order.date === date);
   const dayAbsences = absencesData.filter((absence) => date >= absence.from && date <= absence.to);
   const dayRepairs = workshopRepairsOnDate(repairs, date);
@@ -272,15 +275,15 @@ function CalendarDay({ date, orders, absencesData, repairs, projectsData, driver
       {dayOrders.map((order) => {
         const driver = lookup(driversData, order.driverId);
         const project = lookup(projectsData, order.projectId);
-        return <View key={order.id} style={[styles.calendarOrder, { borderLeftColor: typeColors[order.type] }]}><Text style={styles.calendarTime}>{order.timeWindow}</Text><Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text><Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text></View>;
+        return <Pressable accessibilityRole="button" key={order.id} onPress={() => onSelect({ kind: 'order', id: order.id })} style={[styles.calendarOrder, styles.clickableCalendarEntry, { borderLeftColor: typeColors[order.type] }]}><Text style={styles.calendarTime}>{order.timeWindow}</Text><Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text><Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text></Pressable>;
       })}
       {dayAbsences.map((absence) => {
         const driver = lookup(driversData, absence.driverId);
-        return <View key={`${absence.id}-${date}`} style={styles.calendarAbsence}><Text style={styles.calendarTitle}>{driver?.name}</Text><Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text></View>;
+        return <Pressable accessibilityRole="button" key={`${absence.id}-${date}`} onPress={() => onSelect({ kind: 'absence', id: absence.id })} style={[styles.calendarAbsence, styles.clickableCalendarEntry]}><Text style={styles.calendarTitle}>{driver?.name}</Text><Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text></Pressable>;
       })}
       {dayRepairs.map((repair) => {
         const vehicle = lookup(vehiclesData, repair.vehicleId);
-        return <View key={`${repair.id}-${date}`} style={styles.calendarRepair}><Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text><Text style={styles.calendarTitle}>{vehicle?.internalNumber} · {repair.title}</Text><Text style={styles.calendarMeta}>{repair.workshopName ?? 'Werkstatt offen'}</Text></View>;
+        return <Pressable accessibilityRole="button" key={`${repair.id}-${date}`} onPress={() => onSelect({ kind: 'repair', id: repair.id })} style={[styles.calendarRepair, styles.clickableCalendarEntry]}><Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text><Text style={styles.calendarTitle}>{vehicle?.internalNumber} · {repair.title}</Text><Text style={styles.calendarMeta}>{repair.workshopName ?? 'Werkstatt offen'}</Text></Pressable>;
       })}
       {empty ? <Text style={styles.calendarEmpty}>Noch frei</Text> : null}
     </View>
@@ -296,6 +299,9 @@ function DispositionView({
   vehiclesData,
   trailersData,
   onNewOrder,
+  onUpdateOrder,
+  onOpenAbsences,
+  onOpenRepairs,
 }: {
   orders: TransportOrder[];
   absencesData: Absence[];
@@ -305,11 +311,25 @@ function DispositionView({
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
   onNewOrder: () => void;
+  onUpdateOrder: (order: TransportOrder) => void;
+  onOpenAbsences: () => void;
+  onOpenRepairs: () => void;
 }) {
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('week');
   const [anchorDate, setAnchorDate] = useState(toDateKey(new Date()));
+  const [selection, setSelection] = useState<CalendarSelection>();
   const dates = [...new Set(orders.map((order) => order.date))].sort();
   const visibleDates = calendarMode === 'day' ? [anchorDate] : calendarMode === 'week' ? weekDateKeys(anchorDate) : calendarMode === 'month' ? monthDateKeys(anchorDate) : [];
+  const selectedOrder = selection?.kind === 'order' ? lookup(orders, selection.id) : undefined;
+  const selectedAbsence = selection?.kind === 'absence' ? lookup(absencesData, selection.id) : undefined;
+  const selectedRepair = selection?.kind === 'repair' ? lookup(repairs, selection.id) : undefined;
+
+  function moveOrder(hoursOrDays: number, unit: 'hour' | 'day') {
+    if (!selectedOrder) return;
+    const shifted = unit === 'hour' ? shiftOrderByHours(selectedOrder, hoursOrDays) : shiftOrderByDays(selectedOrder, hoursOrDays);
+    onUpdateOrder(shifted);
+    setAnchorDate(shifted.date);
+  }
 
   return (
     <View style={styles.section}>
@@ -321,6 +341,18 @@ function DispositionView({
           <Text style={styles.primaryButtonText}>+ Auftrag</Text>
         </Pressable>
       </View>
+
+      {selection ? <View style={styles.calendarDetail}>
+        <View style={styles.calendarDetailHeader}><Text style={styles.calendarDetailTitle}>{selectedOrder ? 'Transportauftrag' : selectedAbsence ? 'Abwesenheitsmeldung' : 'Reparaturfall'}</Text><Pressable style={styles.closeDetailButton} onPress={() => setSelection(undefined)}><Text style={styles.closeDetailText}>Schliessen ×</Text></Pressable></View>
+        {selectedOrder ? <>
+          <OrderCard order={selectedOrder} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} />
+          {calendarMode === 'day' ? <View style={styles.moveActions}><Pressable style={styles.moveButton} onPress={() => moveOrder(-1, 'hour')}><Text style={styles.moveButtonText}>− 1 Stunde</Text></Pressable><Pressable style={styles.moveButton} onPress={() => moveOrder(1, 'hour')}><Text style={styles.moveButtonText}>+ 1 Stunde</Text></Pressable></View> : null}
+          {calendarMode === 'week' ? <View style={styles.moveActions}><Pressable style={styles.moveButton} onPress={() => moveOrder(-1, 'day')}><Text style={styles.moveButtonText}>← 1 Tag</Text></Pressable><Pressable style={styles.moveButton} onPress={() => moveOrder(1, 'day')}><Text style={styles.moveButtonText}>1 Tag →</Text></Pressable></View> : null}
+          {calendarMode === 'month' ? <Text style={styles.calendarDetailHint}>Zum Verschieben bitte zur Tages- oder Wochenansicht wechseln.</Text> : null}
+        </> : null}
+        {selectedAbsence ? <><Text style={styles.cardTitle}>{lookup(driversData, selectedAbsence.driverId)?.name}</Text><Text style={styles.muted}>{absenceLabels[selectedAbsence.type]} · {selectedAbsence.from === selectedAbsence.to ? selectedAbsence.from : `${selectedAbsence.from} bis ${selectedAbsence.to}`}</Text>{selectedAbsence.note ? <Text style={styles.description}>{selectedAbsence.note}</Text> : null}<Pressable style={styles.detailLinkButton} onPress={onOpenAbsences}><Text style={styles.detailLinkText}>Abwesenheitsverwaltung öffnen</Text></Pressable></> : null}
+        {selectedRepair ? <><Text style={styles.cardTitle}>{lookup(vehiclesData, selectedRepair.vehicleId)?.internalNumber} · {selectedRepair.title}</Text><Text style={styles.muted}>{selectedRepair.workshopDate} · {selectedRepair.workshopTime ?? 'Zeit offen'} · {selectedRepair.workshopName ?? 'Werkstatt offen'}</Text><Text style={styles.description}>{selectedRepair.description}</Text><Pressable style={styles.detailLinkButton} onPress={onOpenRepairs}><Text style={styles.detailLinkText}>Reparaturfall öffnen</Text></Pressable></> : null}
+      </View> : null}
       <View style={styles.calendarSwitch}>
         <Pressable onPress={() => setCalendarMode('day')} style={[styles.navButton, calendarMode === 'day' && styles.navButtonActive]}>
           <Text style={[styles.navText, calendarMode === 'day' && styles.navTextActive]}>Tag</Text>
@@ -344,16 +376,14 @@ function DispositionView({
         </View>
         <ScrollView horizontal={calendarMode !== 'day'} showsHorizontalScrollIndicator>
           <View style={[styles.calendarBoard, calendarMode === 'month' && styles.monthBoard]}>
-            {visibleDates.map((date) => <CalendarDay key={date} date={date} orders={orders} absencesData={absencesData} repairs={repairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} />)}
+            {visibleDates.map((date) => <CalendarDay key={date} date={date} orders={orders} absencesData={absencesData} repairs={repairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} onSelect={setSelection} />)}
           </View>
         </ScrollView>
       </> : (
         dates.map((date) => (
           <View key={date} style={styles.dayBlock}>
             <Text style={styles.dayTitle}>{date}</Text>
-            {orders.filter((order) => order.date === date).map((order) => (
-              <OrderCard key={order.id} order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} compact />
-            ))}
+            {orders.filter((order) => order.date === date).map((order) => <Pressable key={order.id} onPress={() => setSelection({ kind: 'order', id: order.id })}><OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} compact /></Pressable>)}
           </View>
         ))
       )}
@@ -1191,6 +1221,11 @@ export default function App() {
     setMessage(`${order.orderNumber} wurde gespeichert und eingeplant.`);
   }
 
+  function updateScheduledOrder(order: TransportOrder) {
+    setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+    setMessage(`${order.orderNumber} wurde im Kalender verschoben.`);
+  }
+
   function saveAbsence(absence: Absence) {
     setAbsenceData((current) => [...current, absence]);
     setMessage(`${absenceLabels[absence.type]} wurde erfasst und im Kalender eingetragen.`);
@@ -1299,7 +1334,7 @@ export default function App() {
           ) : null}
 
           {isAdmin && screen === 'calendar' && (
-            <DispositionView orders={orders} absencesData={absenceData} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
+            <DispositionView orders={orders} absencesData={absenceData} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} onUpdateOrder={updateScheduledOrder} onOpenAbsences={() => setScreen('absences')} onOpenRepairs={() => setScreen('repairs')} />
           )}
           {isAdmin && screen === 'newOrder' && (
             <OrderForm customersData={customerData} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
@@ -1369,12 +1404,24 @@ const styles = StyleSheet.create({
   monthColumn: { width: 150, minHeight: 150, borderRadius: 9, padding: 8 },
   weekDay: { color: '#0B4D27', fontWeight: '900', marginBottom: 10 },
   calendarOrder: { borderLeftWidth: 5, backgroundColor: '#F4F7F4', borderRadius: 8, padding: 9, marginBottom: 8 },
+  clickableCalendarEntry: { opacity: 0.98 },
   calendarAbsence: { backgroundColor: '#FFF5C7', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarRepair: { borderLeftWidth: 5, borderLeftColor: '#D97706', backgroundColor: '#FFF1DD', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarTime: { color: '#59675E', fontSize: 11, fontWeight: '700' },
   calendarTitle: { color: '#142018', fontWeight: '900', marginTop: 3 },
   calendarMeta: { color: '#66736A', fontSize: 12, marginTop: 3 },
   calendarEmpty: { color: '#8A958D', textAlign: 'center', marginTop: 26 },
+  calendarDetail: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#A8CDB3', borderRadius: 14, padding: 15, marginBottom: 14 },
+  calendarDetailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 },
+  calendarDetailTitle: { color: '#0B4D27', fontSize: 18, fontWeight: '900' },
+  closeDetailButton: { backgroundColor: '#E7ECE8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  closeDetailText: { color: '#34443A', fontWeight: '800', fontSize: 12 },
+  moveActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  moveButton: { flexGrow: 1, backgroundColor: '#0B4D27', borderRadius: 10, padding: 13, alignItems: 'center' },
+  moveButtonText: { color: '#FFFFFF', fontWeight: '900' },
+  calendarDetailHint: { color: '#5E4B00', backgroundColor: '#FFF5C7', borderRadius: 9, padding: 11 },
+  detailLinkButton: { alignSelf: 'flex-start', backgroundColor: '#0B4D27', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginTop: 14 },
+  detailLinkText: { color: '#FFFFFF', fontWeight: '900' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 14, borderLeftWidth: 6, padding: 16, marginBottom: 10, shadowColor: '#000000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
   cardTopline: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   orderNumber: { color: '#66736A', fontSize: 12, fontWeight: '700', flexShrink: 1 },
