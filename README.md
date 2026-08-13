@@ -23,7 +23,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.10.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.11.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.11.0:
+
+- eigene Admin-Sparte «Abwesenheiten»
+- Mitarbeiter über Dropdown auswählen oder durch Texteingabe filtern
+- Suche nach Name und Personalnummer
+- Abwesenheitsarten Ferien, Kompensation, Krank und Unfall
+- Von-/Bis-Datum und optionale Bemerkung
+- neue Abwesenheit erscheint sofort im Wochenkalender
+- erfasste Abwesenheiten auflisten und löschen
 
 Neu in Version 0.10.0:
 

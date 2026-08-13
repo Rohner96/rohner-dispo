@@ -15,10 +15,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { absences, customers as initialCustomers, drivers as initialDrivers, initialOrders, initialRepairCases, projects as initialProjects, trailers as initialTrailers, vehicles as initialVehicles } from './src/data/demoData';
+import { absences as initialAbsences, customers as initialCustomers, drivers as initialDrivers, initialOrders, initialRepairCases, projects as initialProjects, trailers as initialTrailers, vehicles as initialVehicles } from './src/data/demoData';
 import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
+  Absence,
+  AbsenceType,
   Customer,
   Driver,
   OrderType,
@@ -45,8 +47,9 @@ import {
 import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
 import { activeOnly, defaultAssignmentForDriver, projectsForCustomer } from './src/lib/masterData';
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
+import { filterDrivers, isValidAbsenceRange } from './src/lib/absences';
 
-type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
+type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
 
 const typeLabels: Record<OrderType, string> = {
   kipper: 'Kipper',
@@ -178,6 +181,38 @@ function Dropdown({
   );
 }
 
+function SearchableDriverSelect({ drivers, selected, onSelect }: { drivers: Driver[]; selected: string; onSelect: (driverId: string) => void }) {
+  const selectedDriver = drivers.find((driver) => driver.id === selected);
+  const [query, setQuery] = useState(selectedDriver?.name ?? '');
+  const [open, setOpen] = useState(false);
+  const matches = filterDrivers(drivers, query);
+
+  function select(driver: Driver) {
+    onSelect(driver.id);
+    setQuery(driver.name);
+    setOpen(false);
+  }
+
+  return (
+    <View style={styles.dropdownWrap}>
+      <View style={styles.searchSelectRow}>
+        <TextInput
+          style={styles.searchSelectInput}
+          value={query}
+          onChangeText={(value) => { setQuery(value); onSelect(''); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Mitarbeiter suchen oder auswählen"
+        />
+        <Pressable style={styles.searchSelectButton} onPress={() => setOpen((value) => !value)}><Text style={styles.searchSelectArrow}>{open ? '▲' : '▼'}</Text></Pressable>
+      </View>
+      {open ? <View style={styles.dropdownMenu}>
+        {matches.map((driver) => <Pressable key={driver.id} style={[styles.dropdownOption, driver.id === selected && styles.dropdownOptionActive]} onPress={() => select(driver)}><Text style={[styles.dropdownOptionText, driver.id === selected && styles.dropdownOptionTextActive]}>{driver.personnelNumber ? `${driver.personnelNumber} · ` : ''}{driver.name}</Text></Pressable>)}
+        {matches.length === 0 ? <Text style={styles.noSearchResult}>Kein passender Mitarbeiter gefunden.</Text> : null}
+      </View> : null}
+    </View>
+  );
+}
+
 function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false }: { order: TransportOrder; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean }) {
   const project = lookup(projectsData, order.projectId);
   const driver = lookup(driversData, order.driverId);
@@ -220,10 +255,10 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
 
 const absenceLabels = {
   ferien: 'Ferien',
-  krank: 'Krank',
   kompensation: 'Kompensation',
-  urlaub: 'Urlaub',
-};
+  krank: 'Krank',
+  unfall: 'Unfall',
+} satisfies Record<AbsenceType, string>;
 
 const weekDays = [
   { date: '2026-08-10', label: 'Mo 10.8.' },
@@ -235,6 +270,7 @@ const weekDays = [
 
 function DispositionView({
   orders,
+  absencesData,
   repairs,
   projectsData,
   driversData,
@@ -243,6 +279,7 @@ function DispositionView({
   onNewOrder,
 }: {
   orders: TransportOrder[];
+  absencesData: Absence[];
   repairs: RepairCase[];
   projectsData: Project[];
   driversData: Driver[];
@@ -278,7 +315,7 @@ function DispositionView({
           <View style={styles.weekBoard}>
             {weekDays.map((day) => {
               const dayOrders = orders.filter((order) => order.date === day.date);
-              const dayAbsences = absences.filter((absence) => day.date >= absence.from && day.date <= absence.to);
+              const dayAbsences = absencesData.filter((absence) => day.date >= absence.from && day.date <= absence.to);
               const dayRepairs = workshopRepairsOnDate(repairs, day.date);
               return (
                 <View key={day.date} style={styles.weekColumn}>
@@ -331,6 +368,54 @@ function DispositionView({
           </View>
         ))
       )}
+    </View>
+  );
+}
+
+function AbsencesView({ absencesData, driversData, onSave, onDelete }: { absencesData: Absence[]; driversData: Driver[]; onSave: (absence: Absence) => void; onDelete: (id: string) => void }) {
+  const activeDrivers = activeOnly(driversData);
+  const [driverId, setDriverId] = useState('');
+  const [type, setType] = useState<AbsenceType>('ferien');
+  const [from, setFrom] = useState('2026-08-13');
+  const [to, setTo] = useState('2026-08-13');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+
+  function save() {
+    if (!driverId) return setError('Bitte einen Mitarbeiter aus der Auswahl anklicken.');
+    if (!isValidAbsenceRange(from.trim(), to.trim())) return setError('Bitte einen gültigen Zeitraum im Format JJJJ-MM-TT eingeben. Das Bis-Datum darf nicht vor dem Von-Datum liegen.');
+    onSave({ id: `absence-${Date.now()}`, driverId, type, from: from.trim(), to: to.trim(), note: note.trim() || undefined });
+    setDriverId('');
+    setNote('');
+    setError('');
+  }
+
+  const sorted = [...absencesData].sort((a, b) => b.from.localeCompare(a.from));
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>PERSONALPLANUNG</Text>
+      <Text style={styles.heading}>Abwesenheiten</Text>
+      <Text style={styles.infoBox}>Mitarbeiter über das Dropdown auswählen oder den Namen bzw. die Personalnummer eintippen. Der Eintrag erscheint nach dem Speichern direkt im Kalender.</Text>
+      <View style={styles.absenceForm}>
+        <Text style={styles.fieldLabel}>Mitarbeiter</Text>
+        <SearchableDriverSelect drivers={activeDrivers} selected={driverId} onSelect={setDriverId} />
+        <Text style={styles.fieldLabel}>Art der Abwesenheit</Text>
+        <ChoiceRow options={(Object.keys(absenceLabels) as AbsenceType[]).map((value) => ({ value, label: absenceLabels[value] }))} selected={type} onSelect={setType} />
+        <View style={styles.formGrid}>
+          <View style={styles.formField}><Text style={styles.fieldLabel}>Von</Text><TextInput style={styles.input} value={from} onChangeText={setFrom} placeholder="JJJJ-MM-TT" /></View>
+          <View style={styles.formField}><Text style={styles.fieldLabel}>Bis</Text><TextInput style={styles.input} value={to} onChangeText={setTo} placeholder="JJJJ-MM-TT" /></View>
+        </View>
+        <Text style={styles.fieldLabel}>Bemerkung</Text>
+        <TextInput style={[styles.input, styles.textArea]} multiline numberOfLines={3} value={note} onChangeText={setNote} placeholder="Optional, z. B. Arztzeugnis vorhanden" />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <Pressable style={styles.primaryButtonLarge} onPress={save}><Text style={styles.primaryButtonText}>Abwesenheit erfassen</Text></Pressable>
+      </View>
+
+      <Text style={styles.listHeading}>Erfasste Abwesenheiten</Text>
+      {sorted.length === 0 ? <Text style={styles.empty}>Noch keine Abwesenheit erfasst.</Text> : sorted.map((absence) => {
+        const driver = lookup(driversData, absence.driverId);
+        return <View key={absence.id} style={styles.absenceRow}><View style={styles.billingMain}><Text style={styles.listTitle}>{driver?.name ?? 'Unbekannter Mitarbeiter'} · {absenceLabels[absence.type]}</Text><Text style={styles.muted}>{absence.from === absence.to ? absence.from : `${absence.from} bis ${absence.to}`}{absence.note ? ` · ${absence.note}` : ''}</Text></View><Pressable style={styles.deleteButton} onPress={() => onDelete(absence.id)}><Text style={styles.deleteButtonText}>Löschen</Text></Pressable></View>;
+      })}
     </View>
   );
 }
@@ -1068,6 +1153,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser>();
   const [screen, setScreen] = useState<Screen>('calendar');
   const [orders, setOrders] = useState(initialOrders);
+  const [absenceData, setAbsenceData] = useState(initialAbsences);
   const [repairs, setRepairs] = useState(initialRepairCases);
   const [customerData, setCustomerData] = useState(initialCustomers);
   const [projectData, setProjectData] = useState(initialProjects);
@@ -1139,6 +1225,16 @@ export default function App() {
     setMessage(`${order.orderNumber} wurde gespeichert und eingeplant.`);
   }
 
+  function saveAbsence(absence: Absence) {
+    setAbsenceData((current) => [...current, absence]);
+    setMessage(`${absenceLabels[absence.type]} wurde erfasst und im Kalender eingetragen.`);
+  }
+
+  function deleteAbsence(id: string) {
+    setAbsenceData((current) => current.filter((absence) => absence.id !== id));
+    setMessage('Abwesenheit wurde gelöscht.');
+  }
+
   function reportRepair(repair: RepairCase) {
     setRepairs((current) => [repair, ...current]);
     setMessage(`${repair.caseNumber} wurde gemeldet und an die Administration übermittelt.`);
@@ -1207,6 +1303,9 @@ export default function App() {
               <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
               </Pressable>
+              <Pressable onPress={() => setScreen('absences')} style={[styles.navButton, screen === 'absences' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'absences' && styles.navTextActive]}>Abwesenheiten</Text>
+              </Pressable>
               <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Reparaturen ({repairs.filter((repair) => repair.status !== 'erledigt').length})</Text>
               </Pressable>
@@ -1236,7 +1335,7 @@ export default function App() {
           {isAdmin && <SummaryBar orders={orders} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} />}
 
           {isAdmin && screen === 'calendar' && (
-            <DispositionView orders={orders} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
+            <DispositionView orders={orders} absencesData={absenceData} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
           )}
           {isAdmin && screen === 'newOrder' && (
             <OrderForm customersData={customerData} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
@@ -1253,6 +1352,7 @@ export default function App() {
           {isAdmin && screen === 'billing' && (
             <OfficeView orders={orders} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
           )}
+          {isAdmin && screen === 'absences' && <AbsencesView absencesData={absenceData} driversData={driverData} onSave={saveAbsence} onDelete={deleteAbsence} />}
           {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onProjectsChange={setProjectData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
         </View>
       </ScrollView>
@@ -1370,11 +1470,20 @@ const styles = StyleSheet.create({
   dropdownOptionActive: { backgroundColor: '#E4F2E8' },
   dropdownOptionText: { color: '#34443A' },
   dropdownOptionTextActive: { color: '#0B4D27', fontWeight: '800' },
+  searchSelectRow: { flexDirection: 'row' },
+  searchSelectInput: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderRightWidth: 0, borderColor: '#C7D1C9', borderTopLeftRadius: 10, borderBottomLeftRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' },
+  searchSelectButton: { width: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderTopRightRadius: 10, borderBottomRightRadius: 10 },
+  searchSelectArrow: { color: '#0B4D27', fontSize: 11, fontWeight: '900' },
+  noSearchResult: { color: '#6A756D', padding: 13 },
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   formField: { minWidth: 220, flex: 1 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   formActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 24 },
+  absenceForm: { backgroundColor: '#E7ECE8', borderRadius: 14, padding: 16, marginBottom: 18 },
+  absenceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8E2', padding: 14, marginBottom: 8 },
+  deleteButton: { backgroundColor: '#FDE7E5', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 10 },
+  deleteButtonText: { color: '#8A2921', fontWeight: '800' },
   listHeading: { color: '#0B4D27', fontSize: 18, fontWeight: '900', marginTop: 16, marginBottom: 8 },
   listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8E2', padding: 14 },
   listTitle: { color: '#142018', fontWeight: '800' },

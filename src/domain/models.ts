@@ -45,7 +45,7 @@ export interface WorkflowEvent {
   at: string;
 }
 
-export type AbsenceType = 'ferien' | 'krank' | 'kompensation' | 'urlaub';
+export type AbsenceType = 'ferien' | 'kompensation' | 'krank' | 'unfall';
 
 export interface Absence {
   id: string;

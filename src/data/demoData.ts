@@ -32,7 +32,7 @@ export const projects: Project[] = [
 export const absences: Absence[] = [
   { id: 'a1', driverId: 'd3', type: 'ferien', from: '2026-08-10', to: '2026-08-14', note: 'Ferien' },
   { id: 'a2', driverId: 'd2', type: 'kompensation', from: '2026-08-13', to: '2026-08-13', note: 'Kompensation' },
-  { id: 'a3', driverId: 'd1', type: 'urlaub', from: '2026-08-14', to: '2026-08-14', note: 'Urlaub halber Tag' },
+  { id: 'a3', driverId: 'd1', type: 'unfall', from: '2026-08-14', to: '2026-08-14', note: 'Unfallabwesenheit' },
 ];
 
 export const initialOrders: TransportOrder[] = [
