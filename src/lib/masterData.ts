@@ -9,3 +9,7 @@ export function toggleActive<T extends { id: string; active: boolean }>(items: T
 export function projectsForCustomer<T extends { customerId: string; active: boolean }>(items: T[], customerId: string): T[] {
   return items.filter((item) => item.customerId === customerId && item.active);
 }
+
+export function defaultAssignmentForDriver<T extends { defaultVehicleId?: string; defaultTrailerId?: string }>(driver?: T): { vehicleId?: string; trailerId?: string } {
+  return { vehicleId: driver?.defaultVehicleId, trailerId: driver?.defaultTrailerId };
+}

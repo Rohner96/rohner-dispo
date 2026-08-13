@@ -17,3 +17,13 @@ test('meldet Mitarbeiter mit zugehörigem Chauffeur an', () => {
 test('weist falsches Passwort zurück', () => {
   assert.equal(authenticateDemoUser('admin', 'falsch'), undefined);
 });
+
+test('neu angelegter Mitarbeiter kann sich mit Testpasswort anmelden', () => {
+  const user = authenticateDemoUser('neuer', 'demo', [{ id: 'u-new', username: 'neuer', displayName: 'Neuer Mitarbeiter', role: 'employee', active: true, driverId: 'd-new' }]);
+  assert.equal(user?.driverId, 'd-new');
+});
+
+test('gesperrter Mitarbeiter kann sich nicht anmelden', () => {
+  const user = authenticateDemoUser('gesperrt', 'demo', [{ id: 'u-off', username: 'gesperrt', displayName: 'Gesperrt', role: 'employee', active: false, driverId: 'd-off' }]);
+  assert.equal(user, undefined);
+});

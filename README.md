@@ -23,7 +23,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.9.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.10.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.10.0:
+
+- erweiterte Mitarbeitermaske mit Kontakt-, Anstellungs- und internen Angaben
+- Standard-LKW und Standard-Anhänger je Mitarbeiter
+- Standardgespann wird bei der Chauffeurwahl im Auftrag automatisch vorausgewählt
+- Fahrzeug und Anhänger bleiben im Auftrag frei veränderbar
+- Mitarbeiter und Benutzer in einer gemeinsamen Stammdatenmaske
+- jeder neue Mitarbeiter erhält automatisch einen Portalzugang
+- Benutzername, Berechtigung und Zugangssperre direkt beim Mitarbeiter verwalten
 
 Neu in Version 0.9.0:
 

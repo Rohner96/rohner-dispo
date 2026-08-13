@@ -40,19 +40,21 @@ const demoCredentials: DemoCredential[] = [
     active: true,
     driverId: 'd2',
   },
+  {
+    id: 'u-andre',
+    username: 'andre',
+    password: 'demo',
+    displayName: 'André Beispiel',
+    role: 'employee',
+    active: true,
+    driverId: 'd3',
+  },
 ];
 
 export const demoUsers: AppUser[] = demoCredentials.map(({ password: _password, ...user }) => user);
 
-export function authenticateDemoUser(username: string, password: string): AppUser | undefined {
+export function authenticateDemoUser(username: string, password: string, users: AppUser[] = demoUsers): AppUser | undefined {
   const normalizedUsername = username.trim().toLowerCase();
-  const credential = demoCredentials.find((item) => (
-    item.active
-    && item.username.toLowerCase() === normalizedUsername
-    && item.password === password
-  ));
-
-  if (!credential) return undefined;
-  const { password: _password, ...user } = credential;
-  return user;
+  if (password !== 'demo') return undefined;
+  return users.find((item) => item.active && item.username.toLowerCase() === normalizedUsername);
 }

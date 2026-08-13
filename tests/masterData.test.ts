@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { activeOnly, projectsForCustomer, toggleActive } from '../src/lib/masterData';
+import { activeOnly, defaultAssignmentForDriver, projectsForCustomer, toggleActive } from '../src/lib/masterData';
 
 const records = [
   { id: '1', name: 'Aktiv', active: true },
@@ -25,4 +25,9 @@ test('zeigt beim Auftrag nur aktive Projekte des gewählten Kunden', () => {
     { id: 'p3', customerId: 'c2', active: true },
   ];
   assert.deepEqual(projectsForCustomer(projects, 'c1').map((item) => item.id), ['p1']);
+});
+
+test('übernimmt das Standardgespann des gewählten Chauffeurs', () => {
+  assert.deepEqual(defaultAssignmentForDriver({ defaultVehicleId: 'v2', defaultTrailerId: 't1' }), { vehicleId: 'v2', trailerId: 't1' });
+  assert.deepEqual(defaultAssignmentForDriver(undefined), { vehicleId: undefined, trailerId: undefined });
 });

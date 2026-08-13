@@ -43,7 +43,7 @@ import {
   workflowLabels,
 } from './src/lib/workflow';
 import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
-import { activeOnly, projectsForCustomer } from './src/lib/masterData';
+import { activeOnly, defaultAssignmentForDriver, projectsForCustomer } from './src/lib/masterData';
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
@@ -369,9 +369,11 @@ function OrderForm({
   const [delivery, setDelivery] = useState('Abladeort');
   const [deliveryMapUrl, setDeliveryMapUrl] = useState('');
   const [description, setDescription] = useState('Bemerkungen zum Auftrag');
-  const [driverId, setDriverId] = useState(activeDrivers[0]?.id ?? '');
-  const [vehicleId, setVehicleId] = useState(activeVehicles[0]?.id ?? '');
-  const [trailerId, setTrailerId] = useState('none');
+  const initialDriver = activeDrivers[0];
+  const initialAssignment = defaultAssignmentForDriver(initialDriver);
+  const [driverId, setDriverId] = useState(initialDriver?.id ?? '');
+  const [vehicleId, setVehicleId] = useState(initialAssignment.vehicleId && activeVehicles.some((item) => item.id === initialAssignment.vehicleId) ? initialAssignment.vehicleId : activeVehicles[0]?.id ?? '');
+  const [trailerId, setTrailerId] = useState(initialAssignment.trailerId && activeTrailers.some((item) => item.id === initialAssignment.trailerId) ? initialAssignment.trailerId : 'none');
 
   function save() {
     const number = `A-2026-${String(Date.now()).slice(-4)}`;
@@ -487,7 +489,12 @@ function OrderForm({
       <Dropdown
         options={activeDrivers.map((driver) => ({ value: driver.id, label: `${driver.personnelNumber ? `${driver.personnelNumber} · ` : ''}${driver.name}` }))}
         selected={driverId}
-        onSelect={setDriverId}
+        onSelect={(value) => {
+          setDriverId(value);
+          const assignment = defaultAssignmentForDriver(activeDrivers.find((driver) => driver.id === value));
+          setVehicleId(assignment.vehicleId && activeVehicles.some((item) => item.id === assignment.vehicleId) ? assignment.vehicleId : activeVehicles[0]?.id ?? '');
+          setTrailerId(assignment.trailerId && activeTrailers.some((item) => item.id === assignment.trailerId) ? assignment.trailerId : 'none');
+        }}
       />
 
       <Text style={styles.fieldLabel}>LKW</Text>
@@ -899,13 +906,13 @@ function AdminRepairsView({
   );
 }
 
-function LoginView({ onLogin }: { onLogin: (user: AppUser) => void }) {
+function LoginView({ onLogin, users }: { onLogin: (user: AppUser) => void; users: AppUser[] }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   function login() {
-    const user = authenticateDemoUser(username, password);
+    const user = authenticateDemoUser(username, password, users);
     if (!user) {
       setError('Benutzername oder Passwort ist falsch.');
       return;
@@ -1154,7 +1161,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
-        <LoginView onLogin={login} />
+        <LoginView onLogin={login} users={userData} />
       </SafeAreaView>
     );
   }

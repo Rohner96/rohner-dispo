@@ -5,14 +5,13 @@ import { AppUser } from '../auth/demoAuth';
 import { Customer, CustomerContact, Driver, OrderType, Project, Trailer, Vehicle } from '../domain/models';
 import { toggleActive } from '../lib/masterData';
 
-type Tab = 'customers' | 'drivers' | 'vehicles' | 'trailers' | 'users';
+type Tab = 'customers' | 'drivers' | 'vehicles' | 'trailers';
 
 const tabs: { value: Tab; label: string }[] = [
   { value: 'customers', label: 'Kunden' },
   { value: 'drivers', label: 'Mitarbeiter' },
   { value: 'vehicles', label: 'LKW' },
   { value: 'trailers', label: 'Anhänger' },
-  { value: 'users', label: 'Benutzer' },
 ];
 
 const vehicleTypes: { value: OrderType; label: string }[] = [
@@ -66,11 +65,11 @@ export function MasterDataView(props: Props) {
     setEditingId('new');
     setError('');
     if (tab === 'vehicles') setForm({ category: 'kipper' });
-    else if (tab === 'users') setForm({ role: 'employee', driverId: '' });
+    else if (tab === 'drivers') setForm({ function: 'Chauffeur', employmentPercentage: '100', defaultVehicleId: '', defaultTrailerId: 'none', role: 'employee', portalActive: 'yes' });
     else setForm({});
   }
 
-  function beginEdit(item: Customer | Driver | Vehicle | Trailer | AppUser) {
+  function beginEdit(item: Customer | Driver | Vehicle | Trailer) {
     setEditingId(item.id);
     setError('');
     if (tab === 'customers') {
@@ -78,16 +77,14 @@ export function MasterDataView(props: Props) {
       setForm({ customerNumber: value.customerNumber, name: value.name, address: value.address ?? '' });
     } else if (tab === 'drivers') {
       const value = item as Driver;
-      setForm({ personnelNumber: value.personnelNumber ?? '', name: value.name, phone: value.phone ?? '' });
+      const user = props.users.find((candidate) => candidate.driverId === value.id);
+      setForm({ personnelNumber: value.personnelNumber ?? '', name: value.name, address: value.address ?? '', phone: value.phone ?? '', email: value.email ?? '', function: value.function ?? 'Chauffeur', employmentStart: value.employmentStart ?? '', employmentPercentage: value.employmentPercentage ? String(value.employmentPercentage) : '100', notes: value.notes ?? '', defaultVehicleId: value.defaultVehicleId ?? '', defaultTrailerId: value.defaultTrailerId ?? 'none', username: user?.username ?? '', role: user?.role ?? 'employee', portalActive: user?.active === false ? 'no' : 'yes' });
     } else if (tab === 'vehicles') {
       const value = item as Vehicle;
       setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category });
     } else if (tab === 'trailers') {
       const value = item as Trailer;
       setForm({ internalNumber: value.internalNumber, label: value.label });
-    } else {
-      const value = item as AppUser;
-      setForm({ displayName: value.displayName, username: value.username, role: value.role, driverId: value.driverId ?? '' });
     }
   }
 
@@ -108,10 +105,17 @@ export function MasterDataView(props: Props) {
         props.onProjectsChange(props.projects.map((project) => project.customerId === id ? { ...project, customerName: value.name } : project));
       }
     } else if (tab === 'drivers') {
-      if (!form.name?.trim()) return setError('Der Name ist erforderlich.');
+      if (!form.name?.trim() || !form.username?.trim()) return setError('Name und Benutzername sind erforderlich.');
+      const username = form.username.trim().toLowerCase();
+      const duplicateUser = props.users.find((item) => item.username.toLowerCase() === username && item.driverId !== id);
+      if (duplicateUser) return setError('Dieser Benutzername wird bereits verwendet.');
       const old = props.drivers.find((item) => item.id === id);
-      const value: Driver = { id, personnelNumber: form.personnelNumber?.trim(), name: form.name.trim(), phone: form.phone?.trim(), active: old?.active ?? true };
+      const percentage = Number(form.employmentPercentage);
+      const value: Driver = { id, personnelNumber: form.personnelNumber?.trim(), name: form.name.trim(), address: form.address?.trim(), phone: form.phone?.trim(), email: form.email?.trim(), function: form.function?.trim(), employmentStart: form.employmentStart?.trim(), employmentPercentage: Number.isFinite(percentage) ? percentage : undefined, notes: form.notes?.trim(), defaultVehicleId: form.defaultVehicleId || undefined, defaultTrailerId: form.defaultTrailerId && form.defaultTrailerId !== 'none' ? form.defaultTrailerId : undefined, active: old?.active ?? true };
       props.onDriversChange(old ? props.drivers.map((item) => item.id === id ? value : item) : [...props.drivers, value]);
+      const oldUser = props.users.find((item) => item.driverId === id);
+      const user: AppUser = { id: oldUser?.id ?? `user-${id}`, displayName: value.name, username, role: form.role === 'admin' ? 'admin' : 'employee', driverId: id, active: form.portalActive !== 'no' };
+      props.onUsersChange(oldUser ? props.users.map((item) => item.id === oldUser.id ? user : item) : [...props.users, user]);
     } else if (tab === 'vehicles') {
       if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Interne Nummer und Bezeichnung sind erforderlich.');
       const old = props.vehicles.find((item) => item.id === id);
@@ -122,11 +126,6 @@ export function MasterDataView(props: Props) {
       const old = props.trailers.find((item) => item.id === id);
       const value: Trailer = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), active: old?.active ?? true };
       props.onTrailersChange(old ? props.trailers.map((item) => item.id === id ? value : item) : [...props.trailers, value]);
-    } else {
-      if (!form.displayName?.trim() || !form.username?.trim()) return setError('Name und Benutzername sind erforderlich.');
-      const old = props.users.find((item) => item.id === id);
-      const value: AppUser = { id, displayName: form.displayName.trim(), username: form.username.trim().toLowerCase(), role: form.role === 'admin' ? 'admin' : 'employee', driverId: form.role === 'admin' ? undefined : form.driverId || undefined, active: old?.active ?? true };
-      props.onUsersChange(old ? props.users.map((item) => item.id === id ? value : item) : [...props.users, value]);
     }
     setEditingId(undefined);
     setForm({});
@@ -135,13 +134,16 @@ export function MasterDataView(props: Props) {
 
   function toggle(id: string) {
     if (tab === 'customers') props.onCustomersChange(toggleActive(props.customers, id));
-    if (tab === 'drivers') props.onDriversChange(toggleActive(props.drivers, id));
+    if (tab === 'drivers') {
+      props.onDriversChange(toggleActive(props.drivers, id));
+      const driver = props.drivers.find((item) => item.id === id);
+      if (driver) props.onUsersChange(props.users.map((user) => user.driverId === id ? { ...user, active: !driver.active } : user));
+    }
     if (tab === 'vehicles') props.onVehiclesChange(toggleActive(props.vehicles, id));
     if (tab === 'trailers') props.onTrailersChange(toggleActive(props.trailers, id));
-    if (tab === 'users') props.onUsersChange(toggleActive(props.users, id));
   }
 
-  const addLabels: Record<Tab, string> = { customers: 'Kunde', drivers: 'Mitarbeiter', vehicles: 'LKW', trailers: 'Anhänger', users: 'Benutzer' };
+  const addLabels: Record<Tab, string> = { customers: 'Kunde', drivers: 'Mitarbeiter', vehicles: 'LKW', trailers: 'Anhänger' };
 
   const selectedCustomer = props.customers.find((item) => item.id === selectedCustomerId);
   const customerProjects = props.projects.filter((item) => item.customerId === selectedCustomerId);
@@ -247,7 +249,21 @@ export function MasterDataView(props: Props) {
           {tab === 'drivers' && <>
             <Field label="Personalnummer" value={form.personnelNumber} onChange={(value) => change('personnelNumber', value)} />
             <Field label="Vor- und Nachname" value={form.name} onChange={(value) => change('name', value)} />
+            <Field label="Adresse / Wohnort" value={form.address} onChange={(value) => change('address', value)} />
             <Field label="Telefon" value={form.phone} onChange={(value) => change('phone', value)} />
+            <Field label="E-Mail-Adresse" value={form.email} onChange={(value) => change('email', value)} />
+            <Field label="Funktion" value={form.function} onChange={(value) => change('function', value)} />
+            <Field label="Eintrittsdatum" value={form.employmentStart} onChange={(value) => change('employmentStart', value)} />
+            <Field label="Arbeitspensum in %" value={form.employmentPercentage} onChange={(value) => change('employmentPercentage', value)} />
+            <Field label="Interne Bemerkungen" value={form.notes} onChange={(value) => change('notes', value)} />
+            <Text style={styles.groupTitle}>Standardgespann</Text>
+            <Text style={styles.label}>Standard-LKW</Text><View style={styles.options}><Pressable onPress={() => change('defaultVehicleId', '')} style={[styles.option, !form.defaultVehicleId && styles.optionActive]}><Text style={[styles.optionText, !form.defaultVehicleId && styles.optionTextActive]}>Keine Vorgabe</Text></Pressable>{props.vehicles.filter((item) => item.active).map((vehicle) => <Pressable key={vehicle.id} onPress={() => change('defaultVehicleId', vehicle.id)} style={[styles.option, form.defaultVehicleId === vehicle.id && styles.optionActive]}><Text style={[styles.optionText, form.defaultVehicleId === vehicle.id && styles.optionTextActive]}>{vehicle.internalNumber} · {vehicle.label}</Text></Pressable>)}</View>
+            <Text style={styles.label}>Standard-Anhänger</Text><View style={styles.options}><Pressable onPress={() => change('defaultTrailerId', 'none')} style={[styles.option, form.defaultTrailerId === 'none' && styles.optionActive]}><Text style={[styles.optionText, form.defaultTrailerId === 'none' && styles.optionTextActive]}>Ohne Anhänger</Text></Pressable>{props.trailers.filter((item) => item.active).map((trailer) => <Pressable key={trailer.id} onPress={() => change('defaultTrailerId', trailer.id)} style={[styles.option, form.defaultTrailerId === trailer.id && styles.optionActive]}><Text style={[styles.optionText, form.defaultTrailerId === trailer.id && styles.optionTextActive]}>{trailer.internalNumber} · {trailer.label}</Text></Pressable>)}</View>
+            <Text style={styles.groupTitle}>Portalzugang</Text>
+            <Field label="Benutzername" value={form.username} onChange={(value) => change('username', value)} />
+            <Text style={styles.label}>Berechtigung</Text><View style={styles.options}>{(['employee', 'admin'] as const).map((role) => <Pressable key={role} onPress={() => change('role', role)} style={[styles.option, form.role === role && styles.optionActive]}><Text style={[styles.optionText, form.role === role && styles.optionTextActive]}>{role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</Text></Pressable>)}</View>
+            <Text style={styles.label}>Portalzugang</Text><View style={styles.options}><Pressable onPress={() => change('portalActive', 'yes')} style={[styles.option, form.portalActive !== 'no' && styles.optionActive]}><Text style={[styles.optionText, form.portalActive !== 'no' && styles.optionTextActive]}>Aktiv</Text></Pressable><Pressable onPress={() => change('portalActive', 'no')} style={[styles.option, form.portalActive === 'no' && styles.optionActive]}><Text style={[styles.optionText, form.portalActive === 'no' && styles.optionTextActive]}>Gesperrt</Text></Pressable></View>
+            <Text style={styles.warning}>Bis zur sicheren Datenbank lautet das Testpasswort für alle aktiven Portalzugänge «demo». Passwörter werden nicht in den Stammdaten gespeichert.</Text>
           </>}
           {tab === 'vehicles' && <>
             <Field label="Interne Nummer" value={form.internalNumber} onChange={(value) => change('internalNumber', value)} />
@@ -258,23 +274,15 @@ export function MasterDataView(props: Props) {
             <Field label="Interne Nummer" value={form.internalNumber} onChange={(value) => change('internalNumber', value)} />
             <Field label="Bezeichnung / Art" value={form.label} onChange={(value) => change('label', value)} />
           </>}
-          {tab === 'users' && <>
-            <Field label="Anzeigename" value={form.displayName} onChange={(value) => change('displayName', value)} />
-            <Field label="Benutzername" value={form.username} onChange={(value) => change('username', value)} />
-            <Text style={styles.label}>Berechtigung</Text><View style={styles.options}>{(['admin', 'employee'] as const).map((role) => <Pressable key={role} onPress={() => change('role', role)} style={[styles.option, form.role === role && styles.optionActive]}><Text style={[styles.optionText, form.role === role && styles.optionTextActive]}>{role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</Text></Pressable>)}</View>
-            {form.role !== 'admin' && <><Text style={styles.label}>Zugehöriger Mitarbeiter</Text><View style={styles.options}>{props.drivers.filter((item) => item.active).map((driver) => <Pressable key={driver.id} onPress={() => change('driverId', driver.id)} style={[styles.option, form.driverId === driver.id && styles.optionActive]}><Text style={[styles.optionText, form.driverId === driver.id && styles.optionTextActive]}>{driver.name}</Text></Pressable>)}</View></>}
-          </>}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.formActions}><Pressable style={styles.cancelButton} onPress={() => setEditingId(undefined)}><Text style={styles.cancelText}>Abbrechen</Text></Pressable><Pressable style={styles.saveButton} onPress={save}><Text style={styles.saveText}>Speichern</Text></Pressable></View>
         </View>
       ) : null}
 
       {tab === 'customers' && props.customers.map((item) => <DataRow key={item.id} title={`${item.customerNumber} · ${item.name}`} subtitle={`${item.address || 'Keine Adresse'} · ${item.contacts.length} Kontakt(e) · ${props.projects.filter((project) => project.customerId === item.id).length} Projekt(e)`} active={item.active} onOpen={() => openCustomer(item)} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />)}
-      {tab === 'drivers' && props.drivers.map((item) => <DataRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={item.phone} active={item.active} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />)}
+      {tab === 'drivers' && props.drivers.map((item) => { const vehicle = props.vehicles.find((vehicleItem) => vehicleItem.id === item.defaultVehicleId); const trailer = props.trailers.find((trailerItem) => trailerItem.id === item.defaultTrailerId); const user = props.users.find((userItem) => userItem.driverId === item.id); return <DataRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={`${item.function || 'Mitarbeiter'} · ${vehicle?.internalNumber || 'Kein Standard-LKW'}${trailer ? ` + ${trailer.internalNumber}` : ''} · Portal: ${user?.active ? user.username : 'gesperrt'}`} active={item.active} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />; })}
       {tab === 'vehicles' && props.vehicles.map((item) => <DataRow key={item.id} title={`${item.internalNumber} · ${item.label}`} subtitle={vehicleTypes.find((type) => type.value === item.category)?.label} active={item.active} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />)}
       {tab === 'trailers' && props.trailers.map((item) => <DataRow key={item.id} title={`${item.internalNumber} · ${item.label}`} active={item.active} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />)}
-      {tab === 'users' && <Text style={styles.warning}>Passwörter werden hier absichtlich nicht geführt. Bis zur Datenbank funktionieren weiterhin nur die bekannten Testzugänge.</Text>}
-      {tab === 'users' && props.users.map((item) => <DataRow key={item.id} title={item.displayName} subtitle={`${item.username} · ${item.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}`} active={item.active} onEdit={() => beginEdit(item)} onToggle={() => toggle(item.id)} />)}
     </View>
   );
 }
@@ -292,5 +300,5 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }, tab: { backgroundColor: '#E7ECE8', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9 }, tabActive: { backgroundColor: '#0B4D27' }, tabText: { color: '#425047', fontWeight: '700' }, tabTextActive: { color: '#FFF' },
   formCard: { backgroundColor: '#E7ECE8', borderRadius: 14, padding: 16, marginBottom: 16 }, formTitle: { color: '#142018', fontSize: 18, fontWeight: '900', marginBottom: 4 }, label: { color: '#27362C', fontWeight: '800', marginTop: 12, marginBottom: 6 }, input: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, option: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 }, optionActive: { backgroundColor: '#0B4D27', borderColor: '#0B4D27' }, optionText: { color: '#34443A', fontWeight: '700' }, optionTextActive: { color: '#FFF' }, error: { color: '#B42318', fontWeight: '700', marginTop: 10 }, formActions: { flexDirection: 'row', gap: 9, marginTop: 16 }, cancelButton: { borderWidth: 1, borderColor: '#AAB6AD', backgroundColor: '#FFF', borderRadius: 10, padding: 13 }, cancelText: { color: '#34443A', fontWeight: '800' }, saveButton: { flex: 1, backgroundColor: '#0B4D27', borderRadius: 10, padding: 13, alignItems: 'center' }, saveText: { color: '#FFF', fontWeight: '800' },
   dataRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8E2', padding: 14, marginBottom: 8 }, inactiveRow: { opacity: 0.62 }, rowMain: { flex: 1 }, rowTitle: { color: '#142018', fontWeight: '800' }, rowSub: { color: '#6A756D', marginTop: 3 }, status: { color: '#0B4D27', fontSize: 11, fontWeight: '800', marginTop: 5 }, inactiveStatus: { color: '#7B342E' }, rowActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }, editButton: { backgroundColor: '#EEF2EE', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }, editText: { color: '#34443A', fontWeight: '700', fontSize: 12 }, stateButton: { backgroundColor: '#FDE7E5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }, stateText: { color: '#8A2921', fontWeight: '700', fontSize: 12 }, activateButton: { backgroundColor: '#E4F2E8' }, activateText: { color: '#0B4D27' }, warning: { color: '#5E4B00', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginBottom: 10, lineHeight: 19 },
-  openButton: { backgroundColor: '#DCECE1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }, openText: { color: '#0B4D27', fontWeight: '800', fontSize: 12 }, backButton: { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: '#E7ECE8', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9 }, backText: { color: '#0B4D27', fontWeight: '800' }, detailSection: { marginTop: 22, backgroundColor: '#FFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8E2', padding: 16 }, detailHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }, detailTitle: { color: '#142018', fontSize: 19, fontWeight: '900' }, detailRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#E7ECE8', paddingVertical: 13 }, empty: { color: '#6A756D', paddingVertical: 12 },
+  openButton: { backgroundColor: '#DCECE1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }, openText: { color: '#0B4D27', fontWeight: '800', fontSize: 12 }, backButton: { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: '#E7ECE8', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9 }, backText: { color: '#0B4D27', fontWeight: '800' }, detailSection: { marginTop: 22, backgroundColor: '#FFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8E2', padding: 16 }, detailHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }, detailTitle: { color: '#142018', fontSize: 19, fontWeight: '900' }, detailRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#E7ECE8', paddingVertical: 13 }, empty: { color: '#6A756D', paddingVertical: 12 }, groupTitle: { color: '#142018', fontSize: 17, fontWeight: '900', marginTop: 22, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#C7D1C9' },
 });

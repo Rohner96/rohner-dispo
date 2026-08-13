@@ -75,7 +75,15 @@ export interface Driver {
   id: string;
   personnelNumber?: string;
   name: string;
+  address?: string;
   phone?: string;
+  email?: string;
+  function?: string;
+  employmentStart?: string;
+  employmentPercentage?: number;
+  notes?: string;
+  defaultVehicleId?: string;
+  defaultTrailerId?: string;
   active: boolean;
 }
 
