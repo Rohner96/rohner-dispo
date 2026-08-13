@@ -687,7 +687,7 @@ function OrderForm({
       <Dropdown
         options={activeVehicles.map((vehicle) => ({
           value: vehicle.id,
-          label: `${vehicle.internalNumber} · ${vehicle.label}`,
+          label: vehicle.internalNumber,
         }))}
         selected={vehicleId}
         onSelect={setVehicleId}
@@ -699,7 +699,7 @@ function OrderForm({
           { value: 'none', label: 'Ohne Anhänger' },
           ...activeTrailers.map((trailer) => ({
             value: trailer.id,
-            label: `${trailer.internalNumber} · ${trailer.label}`,
+            label: trailer.internalNumber,
           })),
         ]}
         selected={trailerId}
@@ -872,7 +872,7 @@ function RepairCard({ repair, vehiclesData, showReporter = false }: { repair: Re
         </Text>
       </View>
       <Text style={styles.cardTitle}>{repair.title}</Text>
-      <Text style={styles.route}>{vehicle?.internalNumber} · {vehicle?.label}</Text>
+      <Text style={styles.route}>{vehicle?.internalNumber}</Text>
       <Text style={styles.description}>{repair.description}</Text>
       {repair.photoUri ? <Image source={{ uri: repair.photoUri }} style={styles.repairPhoto} resizeMode="cover" /> : null}
       <View style={styles.tags}>
@@ -963,7 +963,7 @@ function EmployeeRepairsView({
 
       <Text style={styles.fieldLabel}>Betroffener LKW</Text>
       <ChoiceRow
-        options={activeVehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.internalNumber} · ${vehicle.label}` }))}
+        options={activeVehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.internalNumber }))}
         selected={vehicleId}
         onSelect={setVehicleId}
       />

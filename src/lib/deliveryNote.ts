@@ -51,8 +51,8 @@ export function buildDeliveryNoteData(
     customer: project?.customerName ?? 'Kunde offen',
     project: project?.name ?? 'Projekt offen',
     driver: driver?.name ?? 'Chauffeur offen',
-    vehicle: vehicle ? `${vehicle.internalNumber} - ${vehicle.label}` : 'LKW offen',
-    trailer: trailer ? `${trailer.internalNumber} - ${trailer.label}` : 'Ohne Anhänger',
+    vehicle: vehicle?.internalNumber ?? 'LKW offen',
+    trailer: trailer?.internalNumber ?? 'Ohne Anhänger',
     rows: [
       { label: 'Auftrag', value: order.title },
       { label: 'Datum', value: order.date },

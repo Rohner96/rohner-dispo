@@ -23,7 +23,15 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.19.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.20.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.20.0:
+
+- Feld «LKW-Nummer» anstelle von «Kurzform» bei LKW
+- Feld «Anhängernummer» anstelle von «Kurzform» bei Anhängern
+- LKW-Nummer und Anhängernummer sind die hauptsächlichen Anzeigenamen in der gesamten App
+- interne Bezeichnung erscheint in den Stammdaten als detaillierte Zusatzinformation
+- Nummern als Überschrift in Listen und Detailmasken
 
 Neu in Version 0.19.0:
 
