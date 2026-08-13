@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { calendarPeriodLabel, calendarWeekLabel, isoWeekNumber, monthDateKeys, shiftCalendarDate, startOfWeek, weekDateKeys } from '../src/lib/calendar';
+import { calendarPeriodLabel, calendarWeekLabel, isoWeekNumber, isWeekendDate, monthDateKeys, shiftCalendarDate, startOfWeek, weekDateKeys } from '../src/lib/calendar';
 
 test('erstellt eine Montag-bis-Sonntag-Woche', () => {
   assert.equal(startOfWeek('2026-08-13'), '2026-08-10');
@@ -31,4 +31,10 @@ test('berechnet ISO-Kalenderwochen auch über den Jahreswechsel korrekt', () => 
 test('zeigt die Kalenderwoche in Tages- und Wochenüberschrift', () => {
   assert.match(calendarPeriodLabel('2026-08-13', 'day'), /KW 33/);
   assert.match(calendarPeriodLabel('2026-08-13', 'week'), /^KW 33/);
+});
+
+test('erkennt Samstag und Sonntag als Wochenende', () => {
+  assert.equal(isWeekendDate('2026-08-14'), false);
+  assert.equal(isWeekendDate('2026-08-15'), true);
+  assert.equal(isWeekendDate('2026-08-16'), true);
 });

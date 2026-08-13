@@ -43,6 +43,11 @@ export function calendarWeekLabel(key: string): string {
   return `KW ${isoWeekNumber(key)}`;
 }
 
+export function isWeekendDate(key: string): boolean {
+  const weekday = parseDateKey(key).getDay();
+  return weekday === 0 || weekday === 6;
+}
+
 export function monthDateKeys(key: string): string[] {
   const anchor = parseDateKey(key);
   const first = toDateKey(new Date(anchor.getFullYear(), anchor.getMonth(), 1, 12));

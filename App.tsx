@@ -48,7 +48,7 @@ import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, wo
 import { activeOnly, defaultAssignmentForDriver, projectsForCustomer } from './src/lib/masterData';
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 import { filterDrivers, isValidAbsenceRange } from './src/lib/absences';
-import { CalendarMode, calendarPeriodLabel, calendarWeekLabel, dayLabel, monthDateKeys, shiftCalendarDate, toDateKey, weekDateKeys } from './src/lib/calendar';
+import { CalendarMode, calendarPeriodLabel, calendarWeekLabel, dayLabel, isWeekendDate, monthDateKeys, shiftCalendarDate, toDateKey, weekDateKeys } from './src/lib/calendar';
 import { shiftOrderByDays, shiftOrderByHours } from './src/lib/orderScheduling';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
@@ -214,7 +214,7 @@ function DatePicker({ value, onSelect }: { value: string; onSelect: (date: strin
           {week.map((date) => {
             const inMonth = date.startsWith(monthPrefix);
             const selected = date === value;
-            return <Pressable key={date} onPress={() => { onSelect(date); setOpen(false); }} style={[styles.datePickerDay, selected && styles.datePickerDaySelected, date === today && !selected && styles.datePickerDayToday]}><Text style={[styles.datePickerDayText, !inMonth && styles.datePickerDayOutside, selected && styles.datePickerDayTextSelected]}>{Number(date.slice(-2))}</Text></Pressable>;
+            return <Pressable key={date} onPress={() => { onSelect(date); setOpen(false); }} style={[styles.datePickerDay, isWeekendDate(date) && styles.datePickerDayWeekend, selected && styles.datePickerDaySelected, date === today && !selected && styles.datePickerDayToday]}><Text style={[styles.datePickerDayText, !inMonth && styles.datePickerDayOutside, selected && styles.datePickerDayTextSelected]}>{Number(date.slice(-2))}</Text></Pressable>;
           })}
         </View>)}
       </View> : null}
@@ -301,6 +301,21 @@ const absenceLabels = {
   unfall: 'Unfall',
 } satisfies Record<AbsenceType, string>;
 
+const absenceColors = {
+  ferien: { background: '#DCEEFF', border: '#2F80ED' },
+  kompensation: { background: '#EFE2FF', border: '#8E44AD' },
+  krank: { background: '#FFE3E3', border: '#C0392B' },
+  unfall: { background: '#FFE8CC', border: '#D97706' },
+} satisfies Record<AbsenceType, { background: string; border: string }>;
+
+type CalendarFilterKey = 'orders' | 'repairs' | AbsenceType;
+
+const calendarFilterOptions: { key: CalendarFilterKey; label: string; background: string; border: string }[] = [
+  { key: 'orders', label: 'Aufträge', background: '#F4F7F4', border: '#0B4D27' },
+  { key: 'repairs', label: 'Werkstatt', background: '#FFF1DD', border: '#D97706' },
+  ...(['ferien', 'kompensation', 'krank', 'unfall'] as AbsenceType[]).map((type) => ({ key: type, label: absenceLabels[type], background: absenceColors[type].background, border: absenceColors[type].border })),
+];
+
 type CalendarSelection = { kind: 'order' | 'absence' | 'repair'; id: string };
 
 function CalendarDay({ date, orders, absencesData, repairs, projectsData, driversData, vehiclesData, mode, onSelect }: { date: string; orders: TransportOrder[]; absencesData: Absence[]; repairs: RepairCase[]; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; mode: 'day' | 'week' | 'month'; onSelect: (selection: CalendarSelection) => void }) {
@@ -309,7 +324,7 @@ function CalendarDay({ date, orders, absencesData, repairs, projectsData, driver
   const dayRepairs = workshopRepairsOnDate(repairs, date);
   const empty = dayOrders.length === 0 && dayAbsences.length === 0 && dayRepairs.length === 0;
   return (
-    <View style={[styles.calendarColumn, mode === 'day' && styles.dayColumn, mode === 'month' && styles.monthColumn]}>
+    <View style={[styles.calendarColumn, isWeekendDate(date) && styles.weekendCalendarColumn, mode === 'day' && styles.dayColumn, mode === 'month' && styles.monthColumn]}>
       <Text style={styles.weekDay}>{dayLabel(date)}</Text>
       {dayOrders.map((order) => {
         const driver = lookup(driversData, order.driverId);
@@ -318,7 +333,8 @@ function CalendarDay({ date, orders, absencesData, repairs, projectsData, driver
       })}
       {dayAbsences.map((absence) => {
         const driver = lookup(driversData, absence.driverId);
-        return <Pressable accessibilityRole="button" key={`${absence.id}-${date}`} onPress={() => onSelect({ kind: 'absence', id: absence.id })} style={[styles.calendarAbsence, styles.clickableCalendarEntry]}><Text style={styles.calendarTitle}>{driver?.name}</Text><Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text></Pressable>;
+        const colors = absenceColors[absence.type];
+        return <Pressable accessibilityRole="button" key={`${absence.id}-${date}`} onPress={() => onSelect({ kind: 'absence', id: absence.id })} style={[styles.calendarAbsence, styles.clickableCalendarEntry, { backgroundColor: colors.background, borderLeftColor: colors.border }]}><Text style={styles.calendarTitle}>{driver?.name}</Text><Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text></Pressable>;
       })}
       {dayRepairs.map((repair) => {
         const vehicle = lookup(vehiclesData, repair.vehicleId);
@@ -357,7 +373,11 @@ function DispositionView({
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('week');
   const [anchorDate, setAnchorDate] = useState(toDateKey(new Date()));
   const [selection, setSelection] = useState<CalendarSelection>();
-  const dates = [...new Set(orders.map((order) => order.date))].sort();
+  const [calendarFilters, setCalendarFilters] = useState<Record<CalendarFilterKey, boolean>>({ orders: true, repairs: true, ferien: true, kompensation: true, krank: true, unfall: true });
+  const filteredOrders = calendarFilters.orders ? orders : [];
+  const filteredRepairs = calendarFilters.repairs ? repairs : [];
+  const filteredAbsences = absencesData.filter((absence) => calendarFilters[absence.type]);
+  const dates = [...new Set(filteredOrders.map((order) => order.date))].sort();
   const visibleDates = calendarMode === 'day' ? [anchorDate] : calendarMode === 'week' ? weekDateKeys(anchorDate) : calendarMode === 'month' ? monthDateKeys(anchorDate) : [];
   const visibleMonthWeeks = calendarMode === 'month' ? Array.from({ length: visibleDates.length / 7 }, (_, index) => visibleDates.slice(index * 7, index * 7 + 7)) : [];
   const selectedOrder = selection?.kind === 'order' ? lookup(orders, selection.id) : undefined;
@@ -369,6 +389,10 @@ function DispositionView({
     const shifted = unit === 'hour' ? shiftOrderByHours(selectedOrder, hoursOrDays) : shiftOrderByDays(selectedOrder, hoursOrDays);
     onUpdateOrder(shifted);
     setAnchorDate(shifted.date);
+  }
+
+  function toggleCalendarFilter(key: CalendarFilterKey) {
+    setCalendarFilters((current) => ({ ...current, [key]: !current[key] }));
   }
 
   return (
@@ -408,6 +432,19 @@ function DispositionView({
         </Pressable>
       </View>
 
+      <View style={styles.calendarFilters}>
+        <Text style={styles.calendarFiltersTitle}>Im Kalender anzeigen</Text>
+        <View style={styles.calendarFilterOptions}>
+          {calendarFilterOptions.map((option) => {
+            const active = calendarFilters[option.key];
+            return <Pressable key={option.key} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggleCalendarFilter(option.key)} style={[styles.calendarFilter, { borderColor: active ? option.border : '#C7D1C9', backgroundColor: active ? option.background : '#F4F5F4' }, !active && styles.calendarFilterInactive]}>
+              <View style={[styles.calendarFilterCheck, { borderColor: active ? option.border : '#AAB3AC', backgroundColor: active ? option.border : '#FFFFFF' }]}><Text style={styles.calendarFilterCheckText}>{active ? '✓' : ''}</Text></View>
+              <Text style={[styles.calendarFilterText, !active && styles.calendarFilterTextInactive]}>{option.label}</Text>
+            </Pressable>;
+          })}
+        </View>
+      </View>
+
       {calendarMode !== 'list' ? <>
         <View style={styles.calendarNavigator}>
           <Pressable accessibilityLabel="Vorheriger Zeitraum" style={styles.calendarArrow} onPress={() => setAnchorDate((date) => shiftCalendarDate(date, calendarMode, -1))}><Text style={styles.calendarArrowText}>‹</Text></Pressable>
@@ -418,17 +455,17 @@ function DispositionView({
           {calendarMode === 'month' ? <View style={styles.monthBoard}>
             {visibleMonthWeeks.map((week) => <View key={week[0]} style={styles.monthWeekRow}>
               <View style={styles.monthWeekNumber}><Text style={styles.monthWeekNumberCaption}>Kalenderwoche</Text><Text style={styles.monthWeekNumberText}>{calendarWeekLabel(week[0]!)}</Text></View>
-              {week.map((date) => <CalendarDay key={date} date={date} orders={orders} absencesData={absencesData} repairs={repairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} onSelect={setSelection} />)}
+              {week.map((date) => <CalendarDay key={date} date={date} orders={filteredOrders} absencesData={filteredAbsences} repairs={filteredRepairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} onSelect={setSelection} />)}
             </View>)}
           </View> : <View style={styles.calendarBoard}>
-            {visibleDates.map((date) => <CalendarDay key={date} date={date} orders={orders} absencesData={absencesData} repairs={repairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} onSelect={setSelection} />)}
+            {visibleDates.map((date) => <CalendarDay key={date} date={date} orders={filteredOrders} absencesData={filteredAbsences} repairs={filteredRepairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} onSelect={setSelection} />)}
           </View>}
         </ScrollView>
       </> : (
         dates.map((date) => (
           <View key={date} style={styles.dayBlock}>
             <Text style={styles.dayTitle}>{dayLabel(date)} · {calendarWeekLabel(date)}</Text>
-            {orders.filter((order) => order.date === date).map((order) => <Pressable key={order.id} onPress={() => setSelection({ kind: 'order', id: order.id })}><OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} compact /></Pressable>)}
+            {filteredOrders.filter((order) => order.date === date).map((order) => <Pressable key={order.id} onPress={() => setSelection({ kind: 'order', id: order.id })}><OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} compact /></Pressable>)}
           </View>
         ))
       )}
@@ -1438,6 +1475,15 @@ const styles = StyleSheet.create({
   dayBlock: { marginBottom: 20 },
   dayTitle: { fontSize: 15, color: '#4B5B50', fontWeight: '800', marginBottom: 8 },
   calendarSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  calendarFilters: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E6E1', borderRadius: 12, padding: 12, marginBottom: 14 },
+  calendarFiltersTitle: { color: '#34443A', fontSize: 12, fontWeight: '900', marginBottom: 9 },
+  calendarFilterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  calendarFilter: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8 },
+  calendarFilterInactive: { opacity: 0.72 },
+  calendarFilterCheck: { width: 18, height: 18, borderWidth: 1, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  calendarFilterCheckText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', lineHeight: 14 },
+  calendarFilterText: { color: '#27362C', fontSize: 12, fontWeight: '800' },
+  calendarFilterTextInactive: { color: '#7C887F' },
   calendarNavigator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E6E1', borderRadius: 12, padding: 8, marginBottom: 12 },
   calendarArrow: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E7ECE8', borderRadius: 9 },
   calendarArrowText: { color: '#0B4D27', fontSize: 28, fontWeight: '800', lineHeight: 30 },
@@ -1449,12 +1495,13 @@ const styles = StyleSheet.create({
   monthWeekNumberCaption: { color: '#52705B', fontSize: 9, fontWeight: '800', textAlign: 'center' },
   monthWeekNumberText: { color: '#0B4D27', fontSize: 16, fontWeight: '900', marginTop: 4 },
   calendarColumn: { width: 200, minHeight: 250, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E0E6E1', padding: 11 },
+  weekendCalendarColumn: { backgroundColor: '#F1F3F2', borderColor: '#D1D8D3' },
   dayColumn: { flex: 1, width: '100%', minHeight: 360 },
   monthColumn: { width: 150, minHeight: 150, borderRadius: 9, padding: 8 },
   weekDay: { color: '#0B4D27', fontWeight: '900', marginBottom: 10 },
   calendarOrder: { borderLeftWidth: 5, backgroundColor: '#F4F7F4', borderRadius: 8, padding: 9, marginBottom: 8 },
   clickableCalendarEntry: { opacity: 0.98 },
-  calendarAbsence: { backgroundColor: '#FFF5C7', borderRadius: 8, padding: 9, marginBottom: 8 },
+  calendarAbsence: { borderLeftWidth: 5, borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarRepair: { borderLeftWidth: 5, borderLeftColor: '#D97706', backgroundColor: '#FFF1DD', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarTime: { color: '#59675E', fontSize: 11, fontWeight: '700' },
   calendarTitle: { color: '#142018', fontWeight: '900', marginTop: 3 },
@@ -1548,6 +1595,7 @@ const styles = StyleSheet.create({
   datePickerWeekNumber: { width: '12.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#E4F2E8' },
   datePickerWeekNumberText: { color: '#0B4D27', fontSize: 11, fontWeight: '900' },
   datePickerDay: { width: '12.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  datePickerDayWeekend: { backgroundColor: '#EEF1EF' },
   datePickerDaySelected: { backgroundColor: '#0B4D27' },
   datePickerDayToday: { borderWidth: 1, borderColor: '#0B4D27' },
   datePickerDayText: { color: '#27362C', fontWeight: '700' },

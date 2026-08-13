@@ -23,7 +23,15 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.17.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.18.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.18.0:
+
+- eigene Kalenderfarbe für Ferien, Kompensation, Krank und Unfall
+- Ansichtsfilter für Aufträge, Werkstatt und jede Abwesenheitsart
+- Filter blenden Einträge nur im Kalender aus und verändern keine gespeicherten Daten
+- Samstag und Sonntag werden im grossen Kalender dezent hinterlegt
+- Wochenenden sind auch in den kleinen Datumskalendern farblich erkennbar
 
 Neu in Version 0.17.0:
 
