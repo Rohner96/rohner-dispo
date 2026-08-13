@@ -38,9 +38,11 @@ jobs:
         run: npm run typecheck && npm test
 
       - name: Webversion erstellen
-        run: npx expo export --platform web
+        run: npx expo export --platform web --clear
         env:
           EXPO_NO_TELEMETRY: 1
+          EXPO_PUBLIC_SUPABASE_URL: https://fukxlbqahzfccmrtjugx.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_HEtBz501jUDZXbZoF-MoAw_tm8ZzKRQ
 
       - name: GitHub Pages einrichten
         uses: actions/configure-pages@v5
