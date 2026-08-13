@@ -30,6 +30,19 @@ export function weekDateKeys(key: string): string[] {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
 }
 
+export function isoWeekNumber(key: string): number {
+  const localDate = parseDateKey(key);
+  const date = new Date(Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()));
+  const weekday = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - weekday);
+  const firstDayOfWeekYear = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - firstDayOfWeekYear.getTime()) / 86_400_000) + 1) / 7);
+}
+
+export function calendarWeekLabel(key: string): string {
+  return `KW ${isoWeekNumber(key)}`;
+}
+
 export function monthDateKeys(key: string): string[] {
   const anchor = parseDateKey(key);
   const first = toDateKey(new Date(anchor.getFullYear(), anchor.getMonth(), 1, 12));
@@ -57,14 +70,14 @@ export function shiftCalendarDate(key: string, mode: CalendarMode, direction: -1
 
 export function calendarPeriodLabel(key: string, mode: CalendarMode): string {
   const date = parseDateKey(key);
-  if (mode === 'day') return new Intl.DateTimeFormat('de-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  if (mode === 'day') return `${new Intl.DateTimeFormat('de-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date)} · ${calendarWeekLabel(key)}`;
   if (mode === 'week') {
     const days = weekDateKeys(key);
     const start = parseDateKey(days[0]!);
     const end = parseDateKey(days[6]!);
     const startLabel = new Intl.DateTimeFormat('de-CH', { day: 'numeric', month: 'short' }).format(start);
     const endLabel = new Intl.DateTimeFormat('de-CH', { day: 'numeric', month: 'short', year: 'numeric' }).format(end);
-    return `${startLabel} – ${endLabel}`;
+    return `${calendarWeekLabel(key)} · ${startLabel} – ${endLabel}`;
   }
   if (mode === 'month') return new Intl.DateTimeFormat('de-CH', { month: 'long', year: 'numeric' }).format(date);
   return 'Alle Einträge';
