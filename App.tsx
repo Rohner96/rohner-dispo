@@ -50,6 +50,8 @@ import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryN
 import { filterDrivers, isValidAbsenceRange } from './src/lib/absences';
 import { CalendarMode, calendarPeriodLabel, calendarWeekLabel, dayLabel, isWeekendDate, monthDateKeys, shiftCalendarDate, toDateKey, weekDateKeys } from './src/lib/calendar';
 import { shiftOrderByDays, shiftOrderByHours } from './src/lib/orderScheduling';
+import { deleteCloudRecord, loadCloudData, restoreCloudIdentity, saveCloudCollection, saveCloudUsers, signInCloud, signOutCloud, subscribeToCloudChanges, CloudAppData, CloudIdentity, RecordKind } from './src/lib/cloudData';
+import { isCloudConfigured } from './src/lib/supabase';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
 
@@ -753,6 +755,7 @@ function DriverView({
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
   const assigned = orders.filter((order) => (
     order.driverId === user.driverId && order.status !== 'verrechnet'
   ));
@@ -1092,19 +1095,17 @@ function AdminRepairsView({
   );
 }
 
-function LoginView({ onLogin, users }: { onLogin: (user: AppUser) => void; users: AppUser[] }) {
+function LoginView({ onLogin, cloudMode }: { onLogin: (username: string, password: string) => Promise<string | undefined>; cloudMode: boolean }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function login() {
-    const user = authenticateDemoUser(username, password, users);
-    if (!user) {
-      setError('Benutzername oder Passwort ist falsch.');
-      return;
-    }
-    setError('');
-    onLogin(user);
+  async function login() {
+    setLoading(true);
+    const loginError = await onLogin(username, password);
+    setError(loginError ?? '');
+    setLoading(false);
   }
 
   return (
@@ -1143,16 +1144,16 @@ function LoginView({ onLogin, users }: { onLogin: (user: AppUser) => void; users
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable style={styles.loginButton} onPress={login}>
-          <Text style={styles.primaryButtonText}>Anmelden</Text>
+        <Pressable disabled={loading} style={[styles.loginButton, loading && styles.disabledButton]} onPress={login}>
+          <Text style={styles.primaryButtonText}>{loading ? 'Wird angemeldet …' : 'Anmelden'}</Text>
         </Pressable>
 
-        <View style={styles.demoBox}>
+        {!cloudMode ? <View style={styles.demoBox}>
           <Text style={styles.demoTitle}>Testzugänge</Text>
           <Text style={styles.demoText}>Administrator: admin / demo</Text>
           <Text style={styles.demoText}>Mitarbeiter: rene / demo</Text>
           <Text style={styles.demoText}>Mitarbeiter: marcel / demo</Text>
-        </View>
+        </View> : <View style={styles.cloudBox}><Text style={styles.cloudTitle}>Zentrale Datenbank aktiv</Text><Text style={styles.cloudText}>Änderungen werden für alle berechtigten Benutzer gemeinsam gespeichert.</Text></View>}
       </View>
     </View>
   );
@@ -1229,6 +1230,8 @@ function OfficeView({
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser>();
+  const [cloudIdentity, setCloudIdentity] = useState<CloudIdentity>();
+  const [initializing, setInitializing] = useState(isCloudConfigured);
   const [screen, setScreen] = useState<Screen>('calendar');
   const [orders, setOrders] = useState(initialOrders);
   const [absenceData, setAbsenceData] = useState(initialAbsences);
@@ -1243,20 +1246,80 @@ export default function App() {
   const { width } = useWindowDimensions();
   const maxWidth = width > 1100 ? 1040 : width;
 
+  useEffect(() => {
+    if (!isCloudConfigured) return;
+    restoreCloudIdentity()
+      .then(async (identity) => {
+        if (!identity) return;
+        await activateCloudIdentity(identity);
+      })
+      .catch((error: Error) => setMessage(error.message))
+      .finally(() => setInitializing(false));
+  }, []);
+
+  useEffect(() => {
+    if (!cloudIdentity) return;
+    return subscribeToCloudChanges(cloudIdentity.organizationId, () => {
+      loadCloudData(cloudIdentity.organizationId).then(applyCloudData).catch(() => setMessage('Der gemeinsame Datenstand konnte nicht aktualisiert werden.'));
+    });
+  }, [cloudIdentity?.organizationId]);
+
+  function applyCloudData(data: CloudAppData) {
+    setCustomerData(data.customers); setProjectData(data.projects); setDriverData(data.drivers); setVehicleData(data.vehicles);
+    setTrailerData(data.trailers); setOrders(data.orders); setAbsenceData(data.absences); setRepairs(data.repairs); setUserData(data.users);
+  }
+
+  async function activateCloudIdentity(identity: CloudIdentity) {
+    const data = await loadCloudData(identity.organizationId);
+    applyCloudData(data);
+    setCloudIdentity(identity);
+    login(identity.user);
+  }
+
+  async function authenticate(username: string, password: string): Promise<string | undefined> {
+    try {
+      if (isCloudConfigured) {
+        const identity = await signInCloud(username, password);
+        await activateCloudIdentity(identity);
+      } else {
+        const user = authenticateDemoUser(username, password, userData);
+        if (!user) return 'Benutzername oder Passwort ist falsch.';
+        login(user);
+      }
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Die Anmeldung ist fehlgeschlagen.';
+    }
+  }
+
   function login(user: AppUser) {
     setCurrentUser(user);
     setScreen(user.role === 'admin' ? 'calendar' : 'driver');
     setMessage(`Willkommen, ${user.displayName}.`);
   }
 
-  function logout() {
+  async function logout() {
+    if (isCloudConfigured) {
+      try { await signOutCloud(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Abmelden fehlgeschlagen.'); return; }
+    }
+    setCloudIdentity(undefined);
     setCurrentUser(undefined);
     setScreen('calendar');
     setMessage('');
   }
 
+  function persistCollection<T extends { id: string }>(kind: RecordKind, items: T[]) {
+    if (!cloudIdentity) return;
+    void saveCloudCollection(cloudIdentity.organizationId, kind, items).catch(() => setMessage('Speichern in der zentralen Datenbank fehlgeschlagen. Bitte Verbindung prüfen.'));
+  }
+
+  function persistUsers(items: AppUser[]) {
+    if (!cloudIdentity) return;
+    void saveCloudUsers(cloudIdentity.organizationId, items).catch(() => setMessage('Portalbenutzer konnten nicht zentral gespeichert werden.'));
+  }
+
   function advanceOrder(id: string) {
-    setOrders((current) => current.map((order) => {
+    const nextOrders: TransportOrder[] = orders.map((order) => {
       if (order.id !== id) return order;
       const step = nextWorkflowStep(order.workflowStep);
       const status = step === 'abgeschlossen'
@@ -1272,12 +1335,13 @@ export default function App() {
         workflowEvents: [...order.workflowEvents, { step, at: new Date().toISOString() }],
         status,
       };
-    }));
+    });
+    setOrders(nextOrders); persistCollection('orders', nextOrders.filter((order) => order.id === id));
     setMessage('Status wurde aktualisiert.');
   }
 
   function backOrder(id: string) {
-    setOrders((current) => current.map((order) => {
+    const nextOrders: TransportOrder[] = orders.map((order) => {
       if (order.id !== id || order.status === 'verrechenbar' || order.status === 'verrechnet') return order;
       const corrected = rollbackWorkflow(order.workflowEvents, order.workflowStep);
       return {
@@ -1286,45 +1350,48 @@ export default function App() {
         workflowEvents: corrected.events,
         status: corrected.step === 'zugeteilt' ? 'zugeteilt' : 'unterwegs',
       };
-    }));
+    });
+    setOrders(nextOrders); persistCollection('orders', nextOrders.filter((order) => order.id === id));
     setMessage('Der letzte Schritt wurde korrigiert. Die vorherige Zeit läuft weiter.');
   }
 
   function releaseForBilling(id: string) {
-    setOrders((current) => current.map((order) => (
+    const nextOrders: TransportOrder[] = orders.map((order) => (
       order.id === id ? { ...order, status: 'verrechenbar' } : order
-    )));
+    ));
+    setOrders(nextOrders); persistCollection('orders', nextOrders);
     setMessage('Auftrag wurde zur Verrechnung freigegeben.');
   }
 
   function saveOrder(order: TransportOrder) {
-    setOrders((current) => [...current, order]);
+    const nextOrders = [...orders, order]; setOrders(nextOrders); persistCollection('orders', [order]);
     setScreen('calendar');
     setMessage(`${order.orderNumber} wurde gespeichert und eingeplant.`);
   }
 
   function updateScheduledOrder(order: TransportOrder) {
-    setOrders((current) => current.map((item) => item.id === order.id ? order : item));
+    setOrders((current) => current.map((item) => item.id === order.id ? order : item)); persistCollection('orders', [order]);
     setMessage(`${order.orderNumber} wurde im Kalender verschoben.`);
   }
 
   function saveAbsence(absence: Absence) {
-    setAbsenceData((current) => [...current, absence]);
+    setAbsenceData((current) => [...current, absence]); persistCollection('absences', [absence]);
     setMessage(`${absenceLabels[absence.type]} wurde erfasst und im Kalender eingetragen.`);
   }
 
   function deleteAbsence(id: string) {
     setAbsenceData((current) => current.filter((absence) => absence.id !== id));
+    if (cloudIdentity) void deleteCloudRecord(cloudIdentity.organizationId, 'absences', id).catch(() => setMessage('Abwesenheit konnte nicht zentral gelöscht werden.'));
     setMessage('Abwesenheit wurde gelöscht.');
   }
 
   function reportRepair(repair: RepairCase) {
-    setRepairs((current) => [repair, ...current]);
+    setRepairs((current) => [repair, ...current]); persistCollection('repairs', [repair]);
     setMessage(`${repair.caseNumber} wurde gemeldet und an die Administration übermittelt.`);
   }
 
   function updateRepair(id: string, status: RepairStatus, details: Partial<RepairCase> = {}) {
-    setRepairs((current) => current.map((repair) => {
+    const nextRepairs = repairs.map((repair) => {
       if (repair.id !== id || !canChangeRepairStatus(repair.status, status)) return repair;
       return {
         ...repair,
@@ -1332,15 +1399,20 @@ export default function App() {
         status,
         events: [...repair.events, { status, at: new Date().toISOString(), byUserId: currentUser?.id ?? 'u-admin' }],
       };
-    }));
+    });
+    setRepairs(nextRepairs); persistCollection('repairs', nextRepairs);
     setMessage(status === 'erledigt' ? 'Reparatur wurde als erledigt abgeschlossen.' : 'Reparaturstatus wurde aktualisiert.');
+  }
+
+  if (initializing) {
+    return <SafeAreaView style={styles.safe}><StatusBar style="light" /><View style={styles.loginPage}><View style={styles.loginCard}><Image source={require('./assets/rohner-logo.png')} style={styles.loginLogo} resizeMode="contain" /><Text style={styles.loginTitle}>Zentrale Daten werden geladen …</Text></View></View></SafeAreaView>;
   }
 
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
-        <LoginView onLogin={login} users={userData} />
+        <LoginView onLogin={authenticate} cloudMode={isCloudConfigured} />
       </SafeAreaView>
     );
   }
@@ -1434,7 +1506,7 @@ export default function App() {
             <OfficeView orders={orders} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
           )}
           {isAdmin && screen === 'absences' && <AbsencesView absencesData={absenceData} driversData={driverData} onSave={saveAbsence} onDelete={deleteAbsence} />}
-          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onProjectsChange={setProjectData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
+          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={(items) => { setCustomerData(items); persistCollection('customers', items); }} onProjectsChange={(items) => { setProjectData(items); persistCollection('projects', items); }} onDriversChange={(items) => { setDriverData(items); persistCollection('drivers', items); }} onVehiclesChange={(items) => { setVehicleData(items); persistCollection('vehicles', items); }} onTrailersChange={(items) => { setTrailerData(items); persistCollection('trailers', items); }} onUsersChange={(items) => { setUserData(items); persistUsers(items); }} />}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1645,4 +1717,7 @@ const styles = StyleSheet.create({
   demoBox: { backgroundColor: '#E7ECE8', borderRadius: 10, padding: 13, marginTop: 18 },
   demoTitle: { color: '#27362C', fontWeight: '800', marginBottom: 5 },
   demoText: { color: '#536158', marginTop: 3 },
+  cloudBox: { backgroundColor: '#E4F2E8', borderWidth: 1, borderColor: '#A8CDB3', borderRadius: 10, padding: 13, marginTop: 18 },
+  cloudTitle: { color: '#0B4D27', fontWeight: '900', marginBottom: 5 },
+  cloudText: { color: '#42614B', fontSize: 12, lineHeight: 18 },
 });

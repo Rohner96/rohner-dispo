@@ -23,7 +23,26 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.20.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.22.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+
+Neu in Version 0.22.0:
+
+- Verbindung mit dem produktiven Supabase-Projekt der Rohner-App
+- öffentlicher Projektzugang für lokale Entwicklung vorkonfiguriert
+- GitHub-Pages-Build automatisch mit der zentralen Datenbank verbunden
+- Administrator `admin` als erster Portalzugang vorbereitet
+- keine geheimen Datenbank- oder Service-Schlüssel im Projekt
+
+Neu in Version 0.21.0:
+
+- zentrale PostgreSQL-Datenbank für Stammdaten und operative Daten
+- richtige, dauerhaft gespeicherte Benutzersitzungen
+- gemeinsame Daten für Web-App und Mobilgeräte
+- automatische Aktualisierung gleichzeitig angemeldeter Geräte
+- geschützte Firmenbereiche und rollenabhängige Datenbankrechte
+- zentral gespeicherte Kunden, Projekte, Mitarbeiter, LKW, Anhänger, Aufträge, Abwesenheiten und Reparaturfälle
+- vollständiges Datenbankschema und Einrichtungsanleitung unter `docs/ZENTRALE-DATENBANK.md`
+- Demomodus bleibt ohne Zugangsdaten weiterhin verwendbar
 
 Neu in Version 0.20.0:
 
