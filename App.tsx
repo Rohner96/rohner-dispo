@@ -183,6 +183,41 @@ function Dropdown({
   );
 }
 
+function DatePicker({ value, onSelect }: { value: string; onSelect: (date: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(value || toDateKey(new Date()));
+  const days = monthDateKeys(visibleMonth);
+  const monthPrefix = visibleMonth.slice(0, 7);
+  const today = toDateKey(new Date());
+  const displayValue = value ? value.split('-').reverse().join('.') : 'Datum auswählen';
+
+  function openCalendar() {
+    if (value) setVisibleMonth(value);
+    setOpen((current) => !current);
+  }
+
+  return (
+    <View style={styles.datePickerWrap}>
+      <Pressable style={styles.datePickerButton} onPress={openCalendar}>
+        <Text style={styles.datePickerButtonText}>📅 {displayValue}</Text><Text style={styles.dropdownArrow}>{open ? '▲' : '▼'}</Text>
+      </Pressable>
+      {open ? <View style={styles.datePickerPanel}>
+        <View style={styles.datePickerHeader}>
+          <Pressable style={styles.datePickerArrow} onPress={() => setVisibleMonth((date) => shiftCalendarDate(date, 'month', -1))}><Text style={styles.datePickerArrowText}>‹</Text></Pressable>
+          <Text style={styles.datePickerMonth}>{calendarPeriodLabel(visibleMonth, 'month')}</Text>
+          <Pressable style={styles.datePickerArrow} onPress={() => setVisibleMonth((date) => shiftCalendarDate(date, 'month', 1))}><Text style={styles.datePickerArrowText}>›</Text></Pressable>
+        </View>
+        <View style={styles.datePickerGrid}>{['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => <Text key={day} style={styles.datePickerWeekday}>{day}</Text>)}</View>
+        <View style={styles.datePickerGrid}>{days.map((date) => {
+          const inMonth = date.startsWith(monthPrefix);
+          const selected = date === value;
+          return <Pressable key={date} onPress={() => { onSelect(date); setOpen(false); }} style={[styles.datePickerDay, selected && styles.datePickerDaySelected, date === today && !selected && styles.datePickerDayToday]}><Text style={[styles.datePickerDayText, !inMonth && styles.datePickerDayOutside, selected && styles.datePickerDayTextSelected]}>{Number(date.slice(-2))}</Text></Pressable>;
+        })}</View>
+      </View> : null}
+    </View>
+  );
+}
+
 function SearchableDriverSelect({ drivers, selected, onSelect }: { drivers: Driver[]; selected: string; onSelect: (driverId: string) => void }) {
   const selectedDriver = drivers.find((driver) => driver.id === selected);
   const [query, setQuery] = useState(selectedDriver?.name ?? '');
@@ -421,8 +456,8 @@ function AbsencesView({ absencesData, driversData, onSave, onDelete }: { absence
         <Text style={styles.fieldLabel}>Art der Abwesenheit</Text>
         <ChoiceRow options={(Object.keys(absenceLabels) as AbsenceType[]).map((value) => ({ value, label: absenceLabels[value] }))} selected={type} onSelect={setType} />
         <View style={styles.formGrid}>
-          <View style={styles.formField}><Text style={styles.fieldLabel}>Von</Text><TextInput style={styles.input} value={from} onChangeText={setFrom} placeholder="JJJJ-MM-TT" /></View>
-          <View style={styles.formField}><Text style={styles.fieldLabel}>Bis</Text><TextInput style={styles.input} value={to} onChangeText={setTo} placeholder="JJJJ-MM-TT" /></View>
+          <View style={styles.formField}><Text style={styles.fieldLabel}>Von</Text><DatePicker value={from} onSelect={(value) => { setFrom(value); if (value > to) setTo(value); }} /></View>
+          <View style={styles.formField}><Text style={styles.fieldLabel}>Bis</Text><DatePicker value={to} onSelect={setTo} /></View>
         </View>
         <Text style={styles.fieldLabel}>Bemerkung</Text>
         <TextInput style={[styles.input, styles.textArea]} multiline numberOfLines={3} value={note} onChangeText={setNote} placeholder="Optional, z. B. Arztzeugnis vorhanden" />
@@ -538,7 +573,7 @@ function OrderForm({
       <View style={styles.formGrid}>
         <View style={styles.formField}>
           <Text style={styles.fieldLabel}>Datum</Text>
-          <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="JJJJ-MM-TT" />
+          <DatePicker value={date} onSelect={setDate} />
         </View>
         <View style={styles.formField}>
           <Text style={styles.fieldLabel}>Zeitfenster</Text>
@@ -1485,6 +1520,22 @@ const styles = StyleSheet.create({
   dropdownOptionActive: { backgroundColor: '#E4F2E8' },
   dropdownOptionText: { color: '#34443A' },
   dropdownOptionTextActive: { color: '#0B4D27', fontWeight: '800' },
+  datePickerWrap: { position: 'relative', zIndex: 20 },
+  datePickerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 13 },
+  datePickerButtonText: { color: '#142018', fontWeight: '800' },
+  datePickerPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 12, padding: 12, marginTop: 6, shadowColor: '#000000', shadowOpacity: 0.12, shadowRadius: 12, elevation: 5 },
+  datePickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
+  datePickerArrow: { width: 40, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E7ECE8', borderRadius: 8 },
+  datePickerArrowText: { color: '#0B4D27', fontSize: 26, fontWeight: '900', lineHeight: 28 },
+  datePickerMonth: { flex: 1, textAlign: 'center', color: '#142018', fontWeight: '900', textTransform: 'capitalize' },
+  datePickerGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  datePickerWeekday: { width: '14.2857%', textAlign: 'center', color: '#66736A', fontSize: 11, fontWeight: '900', paddingVertical: 6 },
+  datePickerDay: { width: '14.2857%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  datePickerDaySelected: { backgroundColor: '#0B4D27' },
+  datePickerDayToday: { borderWidth: 1, borderColor: '#0B4D27' },
+  datePickerDayText: { color: '#27362C', fontWeight: '700' },
+  datePickerDayOutside: { color: '#AAB3AC' },
+  datePickerDayTextSelected: { color: '#FFFFFF', fontWeight: '900' },
   searchSelectRow: { flexDirection: 'row' },
   searchSelectInput: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderRightWidth: 0, borderColor: '#C7D1C9', borderTopLeftRadius: 10, borderBottomLeftRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' },
   searchSelectButton: { width: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderTopRightRadius: 10, borderBottomRightRadius: 10 },

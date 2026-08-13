@@ -23,7 +23,15 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.14.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.15.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.15.0:
+
+- anklickbarer Monatskalender beim Auftrag erfassen
+- anklickbarer Monatskalender für Von- und Bis-Datum bei Abwesenheiten
+- Monat und Jahr mit Pfeilen wechseln
+- ausgewähltes Datum und heutiger Tag werden markiert
+- Von-Datum passt ein davorliegendes Bis-Datum automatisch an
 
 Neu in Version 0.14.0:
 
