@@ -47,6 +47,11 @@ export interface WorkflowEvent {
 
 export type AbsenceType = 'ferien' | 'kompensation' | 'krank' | 'unfall';
 
+export type VehicleCategory = 'sattelschlepper' | 'kipper' | 'silo' | 'fahrmischer';
+export type VehicleAxleConfiguration = '2-achs' | '3-achs' | '4-achs' | '5-achs';
+export type CraneCapacity = 22 | 23 | 30 | 54;
+export type TrailerCategory = 'kippsattel' | 'semi_tieflader_ohne_kran' | 'semi_tieflader_mit_kran';
+
 export interface Absence {
   id: string;
   driverId: string;
@@ -60,7 +65,10 @@ export interface Vehicle {
   id: string;
   internalNumber: string;
   label: string;
-  category: OrderType;
+  category: VehicleCategory;
+  axleConfiguration: VehicleAxleConfiguration;
+  hasCrane: boolean;
+  craneCapacity?: CraneCapacity;
   active: boolean;
 }
 
@@ -68,6 +76,7 @@ export interface Trailer {
   id: string;
   internalNumber: string;
   label: string;
+  category: TrailerCategory;
   active: boolean;
 }
 

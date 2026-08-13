@@ -13,14 +13,14 @@ export const drivers: Driver[] = [
 ];
 
 export const vehicles: Vehicle[] = [
-  { id: 'v1', internalNumber: 'LKW 01', label: 'Kipper 5-Achser', category: 'kipper', active: true },
-  { id: 'v2', internalNumber: 'LKW 07', label: 'LKW-Kran 30 m/t', category: 'kran', active: true },
-  { id: 'v3', internalNumber: 'LKW 12', label: 'Sattelschlepper', category: 'tieflader', active: true },
+  { id: 'v1', internalNumber: 'LKW 01', label: 'Kipper 5-Achser', category: 'kipper', axleConfiguration: '5-achs', hasCrane: false, active: true },
+  { id: 'v2', internalNumber: 'LKW 07', label: 'Sattelschlepper mit Kran', category: 'sattelschlepper', axleConfiguration: '3-achs', hasCrane: true, craneCapacity: 30, active: true },
+  { id: 'v3', internalNumber: 'LKW 12', label: 'Sattelschlepper', category: 'sattelschlepper', axleConfiguration: '2-achs', hasCrane: false, active: true },
 ];
 
 export const trailers: Trailer[] = [
-  { id: 't1', internalNumber: 'ANH 04', label: 'Tandem-Kippanhänger', active: true },
-  { id: 't2', internalNumber: 'TL 02', label: 'Tieflader', active: true },
+  { id: 't1', internalNumber: 'ANH 04', label: 'Kippsattel', category: 'kippsattel', active: true },
+  { id: 't2', internalNumber: 'TL 02', label: 'Semi-Tieflader', category: 'semi_tieflader_ohne_kran', active: true },
 ];
 
 export const projects: Project[] = [

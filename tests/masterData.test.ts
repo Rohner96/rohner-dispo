@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { activeOnly, defaultAssignmentForDriver, projectsForCustomer, toggleActive } from '../src/lib/masterData';
+import { activeOnly, axleConfigurationsForVehicle, defaultAssignmentForDriver, projectsForCustomer, toggleActive } from '../src/lib/masterData';
 
 const records = [
   { id: '1', name: 'Aktiv', active: true },
@@ -30,4 +30,11 @@ test('zeigt beim Auftrag nur aktive Projekte des gewählten Kunden', () => {
 test('übernimmt das Standardgespann des gewählten Chauffeurs', () => {
   assert.deepEqual(defaultAssignmentForDriver({ defaultVehicleId: 'v2', defaultTrailerId: 't1' }), { vehicleId: 'v2', trailerId: 't1' });
   assert.deepEqual(defaultAssignmentForDriver(undefined), { vehicleId: undefined, trailerId: undefined });
+});
+
+test('zeigt passende Achsausführungen abhängig von der Fahrzeugart', () => {
+  assert.deepEqual(axleConfigurationsForVehicle('sattelschlepper'), ['2-achs', '3-achs']);
+  assert.deepEqual(axleConfigurationsForVehicle('kipper'), ['3-achs', '4-achs', '5-achs']);
+  assert.deepEqual(axleConfigurationsForVehicle('silo'), ['3-achs', '4-achs', '5-achs']);
+  assert.deepEqual(axleConfigurationsForVehicle('fahrmischer'), ['3-achs', '4-achs', '5-achs']);
 });

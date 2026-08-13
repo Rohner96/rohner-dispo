@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppUser } from '../auth/demoAuth';
-import { Customer, CustomerContact, Driver, OrderType, Project, Trailer, Vehicle } from '../domain/models';
-import { toggleActive } from '../lib/masterData';
+import { CraneCapacity, Customer, CustomerContact, Driver, Project, Trailer, TrailerCategory, Vehicle, VehicleAxleConfiguration, VehicleCategory } from '../domain/models';
+import { axleConfigurationsForVehicle, toggleActive } from '../lib/masterData';
 
 type Tab = 'customers' | 'drivers' | 'vehicles' | 'trailers';
 type Detail = { tab: Tab; id: string };
@@ -12,10 +12,16 @@ const tabs: { value: Tab; label: string; singular: string }[] = [
   { value: 'customers', label: 'Kunden', singular: 'Kunde' }, { value: 'drivers', label: 'Mitarbeiter', singular: 'Mitarbeiter' },
   { value: 'vehicles', label: 'LKW', singular: 'LKW' }, { value: 'trailers', label: 'Anhänger', singular: 'Anhänger' },
 ];
-const vehicleTypes: { value: OrderType; label: string }[] = [
-  { value: 'kipper', label: 'Kipper' }, { value: 'silo', label: 'Silowagen' }, { value: 'fahrmischer', label: 'Fahrmischer' },
-  { value: 'tieflader', label: 'Sattelschlepper / Tieflader' }, { value: 'langware', label: 'Langware' },
-  { value: 'kran', label: 'LKW-Kran' }, { value: 'kombiniert', label: 'Kombiniert' },
+const vehicleTypes: { value: VehicleCategory; label: string }[] = [
+  { value: 'sattelschlepper', label: 'Sattelschlepper' }, { value: 'kipper', label: 'Kipper' },
+  { value: 'silo', label: 'Silowagen' }, { value: 'fahrmischer', label: 'Fahrmischer' },
+];
+const axleLabels: Record<VehicleAxleConfiguration, string> = { '2-achs': 'Zweiachs', '3-achs': 'Dreiachs', '4-achs': 'Vierachs', '5-achs': 'Fünfachs' };
+const craneCapacities: CraneCapacity[] = [22, 23, 30, 54];
+const trailerTypes: { value: TrailerCategory; label: string }[] = [
+  { value: 'kippsattel', label: 'Kippsattel' },
+  { value: 'semi_tieflader_ohne_kran', label: 'Semi-Tieflader ohne Kran' },
+  { value: 'semi_tieflader_mit_kran', label: 'Semi-Tieflader mit Kran' },
 ];
 
 interface Props {
@@ -40,7 +46,7 @@ export function MasterDataView(props: Props) {
   function openDetail(targetTab: Tab, id: string) {
     setTab(targetTab); setDetail({ tab: targetTab, id }); setError(''); setContactId(undefined); setProjectId(undefined);
     if (id === 'new') {
-      setForm(targetTab === 'drivers' ? { function: 'Chauffeur', employmentPercentage: '100', defaultTrailerId: 'none', role: 'employee', portalActive: 'yes' } : targetTab === 'vehicles' ? { category: 'kipper' } : {});
+      setForm(targetTab === 'drivers' ? { function: 'Chauffeur', employmentPercentage: '100', defaultTrailerId: 'none', role: 'employee', portalActive: 'yes' } : targetTab === 'vehicles' ? { category: 'kipper', axleConfiguration: '3-achs', hasCrane: 'no' } : targetTab === 'trailers' ? { category: 'kippsattel' } : {});
       return;
     }
     if (targetTab === 'customers') {
@@ -52,10 +58,10 @@ export function MasterDataView(props: Props) {
       setForm({ personnelNumber: value.personnelNumber ?? '', name: value.name, address: value.address ?? '', phone: value.phone ?? '', email: value.email ?? '', function: value.function ?? 'Chauffeur', employmentStart: value.employmentStart ?? '', employmentPercentage: value.employmentPercentage ? String(value.employmentPercentage) : '100', notes: value.notes ?? '', defaultVehicleId: value.defaultVehicleId ?? '', defaultTrailerId: value.defaultTrailerId ?? 'none', username: user?.username ?? '', role: user?.role ?? 'employee', portalActive: user?.active === false ? 'no' : 'yes' });
     } else if (targetTab === 'vehicles') {
       const value = props.vehicles.find((item) => item.id === id)!;
-      setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category });
+      setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category, axleConfiguration: value.axleConfiguration, hasCrane: value.hasCrane ? 'yes' : 'no', craneCapacity: value.craneCapacity ? String(value.craneCapacity) : '' });
     } else {
       const value = props.trailers.find((item) => item.id === id)!;
-      setForm({ internalNumber: value.internalNumber, label: value.label });
+      setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category });
     }
   }
 
@@ -80,13 +86,17 @@ export function MasterDataView(props: Props) {
       props.onUsersChange(oldUser ? props.users.map((item) => item.id === oldUser.id ? user : item) : [...props.users, user]);
     } else if (detail.tab === 'vehicles') {
       if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Kurzform und interne Bezeichnung sind erforderlich.');
+      const category = (form.category || 'kipper') as VehicleCategory;
+      const allowedAxles = axleConfigurationsForVehicle(category);
+      if (!allowedAxles.includes(form.axleConfiguration as VehicleAxleConfiguration)) return setError('Bitte eine passende Achsausführung auswählen.');
+      if (form.hasCrane === 'yes' && !craneCapacities.includes(Number(form.craneCapacity) as CraneCapacity)) return setError('Bitte die Kranleistung auswählen.');
       const old = props.vehicles.find((item) => item.id === id);
-      const value: Vehicle = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category: (form.category || 'kipper') as OrderType, active: old?.active ?? true };
+      const value: Vehicle = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category, axleConfiguration: form.axleConfiguration as VehicleAxleConfiguration, hasCrane: form.hasCrane === 'yes', craneCapacity: form.hasCrane === 'yes' ? Number(form.craneCapacity) as CraneCapacity : undefined, active: old?.active ?? true };
       props.onVehiclesChange(old ? props.vehicles.map((item) => item.id === id ? value : item) : [...props.vehicles, value]);
     } else {
       if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Kurzform und interne Bezeichnung sind erforderlich.');
       const old = props.trailers.find((item) => item.id === id);
-      const value: Trailer = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), active: old?.active ?? true };
+      const value: Trailer = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category: (form.category || 'kippsattel') as TrailerCategory, active: old?.active ?? true };
       props.onTrailersChange(old ? props.trailers.map((item) => item.id === id ? value : item) : [...props.trailers, value]);
     }
     setError(''); setDetail(undefined);
@@ -106,6 +116,14 @@ export function MasterDataView(props: Props) {
 
   const detailActive = detail?.id === 'new' ? true : detail?.tab === 'customers' ? props.customers.find((i) => i.id === detail.id)?.active : detail?.tab === 'drivers' ? props.drivers.find((i) => i.id === detail.id)?.active : detail?.tab === 'vehicles' ? props.vehicles.find((i) => i.id === detail.id)?.active : props.trailers.find((i) => i.id === detail?.id)?.active;
   const customer = detail?.tab === 'customers' && detail.id !== 'new' ? props.customers.find((item) => item.id === detail.id) : undefined;
+  const selectedVehicleCategory = (form.category || 'kipper') as VehicleCategory;
+  const vehicleAxleOptions = axleConfigurationsForVehicle(selectedVehicleCategory).map((value) => ({ value, label: axleLabels[value] }));
+
+  function changeVehicleCategory(value: string) {
+    const category = value as VehicleCategory;
+    const allowedAxles = axleConfigurationsForVehicle(category);
+    setForm((current) => ({ ...current, category, axleConfiguration: allowedAxles.includes(current.axleConfiguration as VehicleAxleConfiguration) ? current.axleConfiguration! : allowedAxles[0]! }));
+  }
 
   function saveContact() {
     if (!customer || !contactId || !contactForm.name?.trim()) return;
@@ -129,8 +147,8 @@ export function MasterDataView(props: Props) {
       {detail.tab === 'drivers' && <><Field label="Personalnummer" value={form.personnelNumber} onChange={(v) => change('personnelNumber', v)} /><Field label="Vor- und Nachname" value={form.name} onChange={(v) => change('name', v)} /><Field label="Adresse / Wohnort" value={form.address} onChange={(v) => change('address', v)} /><Field label="Telefon" value={form.phone} onChange={(v) => change('phone', v)} /><Field label="E-Mail-Adresse" value={form.email} onChange={(v) => change('email', v)} /><Field label="Funktion" value={form.function} onChange={(v) => change('function', v)} /><Field label="Eintrittsdatum" value={form.employmentStart} onChange={(v) => change('employmentStart', v)} /><Field label="Arbeitspensum in %" value={form.employmentPercentage} onChange={(v) => change('employmentPercentage', v)} /><Field label="Interne Bemerkungen" value={form.notes} onChange={(v) => change('notes', v)} />
         <Text style={styles.groupTitle}>Standardgespann</Text><OptionGroup label="Standard-LKW" options={[{ value: '', label: 'Keine Vorgabe' }, ...props.vehicles.filter((i) => i.active).map((i) => ({ value: i.id, label: `${i.internalNumber} · ${i.label}` }))]} selected={form.defaultVehicleId ?? ''} onSelect={(v) => change('defaultVehicleId', v)} /><OptionGroup label="Standard-Anhänger" options={[{ value: 'none', label: 'Ohne Anhänger' }, ...props.trailers.filter((i) => i.active).map((i) => ({ value: i.id, label: `${i.internalNumber} · ${i.label}` }))]} selected={form.defaultTrailerId ?? 'none'} onSelect={(v) => change('defaultTrailerId', v)} />
         <Text style={styles.groupTitle}>Portalzugang</Text><Field label="Benutzername" value={form.username} onChange={(v) => change('username', v)} /><OptionGroup label="Berechtigung" options={[{ value: 'employee', label: 'Mitarbeiter' }, { value: 'admin', label: 'Administrator' }]} selected={form.role ?? 'employee'} onSelect={(v) => change('role', v)} /><OptionGroup label="Portalzugang" options={[{ value: 'yes', label: 'Aktiv' }, { value: 'no', label: 'Gesperrt' }]} selected={form.portalActive ?? 'yes'} onSelect={(v) => change('portalActive', v)} /><Text style={styles.warning}>Testpasswort: «demo». Passwörter werden nicht in den Stammdaten gespeichert.</Text></>}
-      {detail.tab === 'vehicles' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={(v) => change('category', v)} /></>}
-      {detail.tab === 'trailers' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /></>}
+      {detail.tab === 'vehicles' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={changeVehicleCategory} /><OptionGroup label="Achsausführung" options={vehicleAxleOptions} selected={form.axleConfiguration ?? vehicleAxleOptions[0]?.value ?? ''} onSelect={(v) => change('axleConfiguration', v)} /><OptionGroup label="Kran vorhanden" options={[{ value: 'no', label: 'Nein' }, { value: 'yes', label: 'Ja' }]} selected={form.hasCrane ?? 'no'} onSelect={(v) => { change('hasCrane', v); if (v === 'no') change('craneCapacity', ''); }} />{form.hasCrane === 'yes' ? <OptionGroup label="Kranleistung" options={craneCapacities.map((capacity) => ({ value: String(capacity), label: `${capacity} Metertonnen` }))} selected={form.craneCapacity ?? ''} onSelect={(v) => change('craneCapacity', v)} /> : null}</>}
+      {detail.tab === 'trailers' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Anhängerart" options={trailerTypes} selected={form.category ?? 'kippsattel'} onSelect={(v) => change('category', v)} /></>}
       {error ? <Text style={styles.error}>{error}</Text> : null}<View style={styles.formActions}><Pressable style={styles.saveButton} onPress={saveDetail}><Text style={styles.saveText}>Speichern</Text></Pressable>{detail.id !== 'new' ? <Pressable style={[styles.stateButton, !detailActive && styles.activateButton]} onPress={toggleCurrent}><Text style={[styles.stateText, !detailActive && styles.activateText]}>{detailActive ? 'Deaktivieren' : 'Aktivieren'}</Text></Pressable> : null}</View>
     </View>
     {customer ? <><DetailSection title="Ansprechpersonen" action="+ Kontakt" onAction={() => { setContactId('new'); setContactForm({}); }}>
@@ -146,8 +164,8 @@ export function MasterDataView(props: Props) {
     <View style={styles.tabs}>{tabs.map((item) => <Pressable key={item.value} onPress={() => setTab(item.value)} style={[styles.tab, tab === item.value && styles.tabActive]}><Text style={[styles.tabText, tab === item.value && styles.tabTextActive]}>{item.label}</Text></Pressable>)}</View>
     {tab === 'customers' && props.customers.map((item) => <ListRow key={item.id} title={`${item.customerNumber} · ${item.name}`} subtitle={`${item.address || 'Keine Adresse'} · ${item.contacts.length} Kontakt(e) · ${props.projects.filter((p) => p.customerId === item.id).length} Projekt(e)`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
     {tab === 'drivers' && props.drivers.map((item) => { const vehicle = props.vehicles.find((v) => v.id === item.defaultVehicleId); const trailer = props.trailers.find((t) => t.id === item.defaultTrailerId); return <ListRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={`${item.function || 'Mitarbeiter'} · ${vehicle?.internalNumber || 'Kein Standard-LKW'}${trailer ? ` + ${trailer.internalNumber}` : ''}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />; })}
-    {tab === 'vehicles' && props.vehicles.map((item) => <ListRow key={item.id} title={item.label} subtitle={`${item.internalNumber} · ${vehicleTypes.find((type) => type.value === item.category)?.label ?? 'Fahrzeugart offen'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
-    {tab === 'trailers' && props.trailers.map((item) => <ListRow key={item.id} title={item.label} subtitle={`Kurzform: ${item.internalNumber}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'vehicles' && props.vehicles.map((item) => <ListRow key={item.id} title={item.label} subtitle={`${item.internalNumber} · ${vehicleTypes.find((type) => type.value === item.category)?.label ?? 'Fahrzeugart offen'} · ${axleLabels[item.axleConfiguration]}${item.hasCrane ? ` · Kran ${item.craneCapacity} Metertonnen` : ' · Ohne Kran'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'trailers' && props.trailers.map((item) => <ListRow key={item.id} title={item.label} subtitle={`${item.internalNumber} · ${trailerTypes.find((type) => type.value === item.category)?.label ?? 'Anhängerart offen'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
   </View>;
 }
 
