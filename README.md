@@ -23,7 +23,16 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.8.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.9.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.9.0:
+
+- eigene Detailmaske für jeden Kunden
+- beliebig viele Ansprechpersonen mit Funktion, Telefon und E-Mail
+- Projekte direkt einem Kunden zuordnen
+- Projekte bearbeiten, aktivieren und deaktivieren
+- Auftragserfassung zeigt nur aktive Projekte des gewählten Kunden
+- Änderungen am Kundennamen werden in dessen Projekten übernommen
 
 Neu in Version 0.8.0:
 

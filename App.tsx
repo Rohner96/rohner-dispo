@@ -15,13 +15,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { absences, customers as initialCustomers, drivers as initialDrivers, initialOrders, initialRepairCases, projects, trailers as initialTrailers, vehicles as initialVehicles } from './src/data/demoData';
+import { absences, customers as initialCustomers, drivers as initialDrivers, initialOrders, initialRepairCases, projects as initialProjects, trailers as initialTrailers, vehicles as initialVehicles } from './src/data/demoData';
 import { AppUser, authenticateDemoUser, demoUsers } from './src/auth/demoAuth';
 import {
   BillingMode,
   Customer,
   Driver,
   OrderType,
+  Project,
   RepairCase,
   RepairCategory,
   RepairPriority,
@@ -42,7 +43,7 @@ import {
   workflowLabels,
 } from './src/lib/workflow';
 import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, workshopRepairsOnDate } from './src/lib/repairs';
-import { activeOnly } from './src/lib/masterData';
+import { activeOnly, projectsForCustomer } from './src/lib/masterData';
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'users';
@@ -97,7 +98,7 @@ function orderMapUrl(order: TransportOrder, target: 'pickup' | 'delivery'): stri
 
 function saveOrderDeliveryNote(
   order: TransportOrder,
-  projectsData: typeof projects,
+  projectsData: Project[],
   driversData: Driver[],
   vehiclesData: Vehicle[],
   trailersData: Trailer[],
@@ -177,7 +178,7 @@ function Dropdown({
   );
 }
 
-function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false }: { order: TransportOrder; projectsData: typeof projects; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean }) {
+function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false }: { order: TransportOrder; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean }) {
   const project = lookup(projectsData, order.projectId);
   const driver = lookup(driversData, order.driverId);
   const vehicle = lookup(vehiclesData, order.vehicleId);
@@ -243,7 +244,7 @@ function DispositionView({
 }: {
   orders: TransportOrder[];
   repairs: RepairCase[];
-  projectsData: typeof projects;
+  projectsData: Project[];
   driversData: Driver[];
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
@@ -344,7 +345,7 @@ function OrderForm({
   onCancel,
 }: {
   customersData: Customer[];
-  projectsData: typeof projects;
+  projectsData: Project[];
   driversData: Driver[];
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
@@ -356,7 +357,7 @@ function OrderForm({
   const activeVehicles = activeOnly(vehiclesData);
   const activeTrailers = activeOnly(trailersData);
   const [customerId, setCustomerId] = useState(activeCustomers[0]?.id ?? '');
-  const matchingProjects = projectsData.filter((project) => project.customerId === customerId);
+  const matchingProjects = projectsForCustomer(projectsData, customerId);
   const [projectId, setProjectId] = useState(matchingProjects[0]?.id ?? '');
   const [type, setType] = useState<OrderType>('kipper');
   const [billingMode, setBillingMode] = useState<BillingMode>('stunde');
@@ -408,7 +409,7 @@ function OrderForm({
         selected={customerId}
         onSelect={(value) => {
           setCustomerId(value);
-          setProjectId(projectsData.find((project) => project.customerId === value)?.id ?? '');
+          setProjectId(projectsForCustomer(projectsData, value)[0]?.id ?? '');
         }}
         placeholder="Kunde auswählen"
       />
@@ -546,7 +547,7 @@ function DriverView({
 }: {
   orders: TransportOrder[];
   user: AppUser;
-  projectsData: typeof projects;
+  projectsData: Project[];
   driversData: Driver[];
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
@@ -973,7 +974,7 @@ function OfficeView({
   onRelease,
 }: {
   orders: TransportOrder[];
-  projectsData: typeof projects;
+  projectsData: Project[];
   driversData: Driver[];
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
@@ -1062,6 +1063,7 @@ export default function App() {
   const [orders, setOrders] = useState(initialOrders);
   const [repairs, setRepairs] = useState(initialRepairCases);
   const [customerData, setCustomerData] = useState(initialCustomers);
+  const [projectData, setProjectData] = useState(initialProjects);
   const [driverData, setDriverData] = useState(initialDrivers);
   const [vehicleData, setVehicleData] = useState(initialVehicles);
   const [trailerData, setTrailerData] = useState(initialTrailers);
@@ -1227,13 +1229,13 @@ export default function App() {
           {isAdmin && <SummaryBar orders={orders} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} />}
 
           {isAdmin && screen === 'calendar' && (
-            <DispositionView orders={orders} repairs={repairs} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
+            <DispositionView orders={orders} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
           )}
           {isAdmin && screen === 'newOrder' && (
-            <OrderForm customersData={customerData} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
+            <OrderForm customersData={customerData} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
           {!isAdmin && screen === 'driver' && (
-            <DriverView orders={orders} user={currentUser} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} onBack={backOrder} />
+            <DriverView orders={orders} user={currentUser} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} onBack={backOrder} />
           )}
           {!isAdmin && screen === 'repairs' && (
             <EmployeeRepairsView repairs={repairs} user={currentUser} vehiclesData={vehicleData} onReport={reportRepair} />
@@ -1242,9 +1244,9 @@ export default function App() {
             <AdminRepairsView repairs={repairs} vehiclesData={vehicleData} onUpdate={updateRepair} />
           )}
           {isAdmin && screen === 'billing' && (
-            <OfficeView orders={orders} projectsData={projects} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
+            <OfficeView orders={orders} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
           )}
-          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
+          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={setCustomerData} onProjectsChange={setProjectData} onDriversChange={setDriverData} onVehiclesChange={setVehicleData} onTrailersChange={setTrailerData} onUsersChange={setUserData} />}
         </View>
       </ScrollView>
     </SafeAreaView>

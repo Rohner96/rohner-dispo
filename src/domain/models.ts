@@ -84,16 +84,26 @@ export interface Customer {
   customerNumber: string;
   name: string;
   address?: string;
-  contact?: string;
+  contacts: CustomerContact[];
   active: boolean;
+}
+
+export interface CustomerContact {
+  id: string;
+  name: string;
+  function?: string;
+  phone?: string;
+  email?: string;
 }
 
 export interface Project {
   id: string;
-  customerId?: string;
+  customerId: string;
   customerName: string;
   projectNumber?: string;
   name: string;
+  description?: string;
+  active: boolean;
 }
 
 export interface TransportOrder {

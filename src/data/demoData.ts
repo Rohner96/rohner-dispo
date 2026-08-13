@@ -1,9 +1,9 @@
 import { Absence, Customer, Driver, Project, RepairCase, Trailer, TransportOrder, Vehicle } from '../domain/models';
 
 export const customers: Customer[] = [
-  { id: 'c1', customerNumber: '10001', name: 'Greuter AG', address: 'Zürich', contact: 'Disposition', active: true },
-  { id: 'c2', customerNumber: '10002', name: 'Kibag', address: 'Baden', contact: 'Baustellenleitung', active: true },
-  { id: 'c3', customerNumber: '10003', name: 'Muster Bau AG', address: 'Siglistorf', active: true },
+  { id: 'c1', customerNumber: '10001', name: 'Greuter AG', address: 'Zürich', contacts: [{ id: 'cp1', name: 'Martin Keller', function: 'Disposition', phone: '+41 44 000 00 01', email: 'dispo@greuter-demo.ch' }], active: true },
+  { id: 'c2', customerNumber: '10002', name: 'Kibag', address: 'Baden', contacts: [{ id: 'cp2', name: 'Sandra Meier', function: 'Baustellenleitung', phone: '+41 56 000 00 02', email: 'sandra.meier@kibag-demo.ch' }], active: true },
+  { id: 'c3', customerNumber: '10003', name: 'Muster Bau AG', address: 'Siglistorf', contacts: [], active: true },
 ];
 
 export const drivers: Driver[] = [
@@ -24,9 +24,9 @@ export const trailers: Trailer[] = [
 ];
 
 export const projects: Project[] = [
-  { id: 'p1', customerId: 'c1', customerName: 'Greuter AG', projectNumber: '10725538', name: 'Baustelle LUWA' },
-  { id: 'p2', customerId: 'c2', customerName: 'Kibag', name: 'Aushub Baustelle Nord' },
-  { id: 'p3', customerId: 'c3', customerName: 'Muster Bau AG', name: 'Baumaschinentransport' },
+  { id: 'p1', customerId: 'c1', customerName: 'Greuter AG', projectNumber: '10725538', name: 'Baustelle LUWA', active: true },
+  { id: 'p2', customerId: 'c2', customerName: 'Kibag', name: 'Aushub Baustelle Nord', active: true },
+  { id: 'p3', customerId: 'c3', customerName: 'Muster Bau AG', name: 'Baumaschinentransport', active: true },
 ];
 
 export const absences: Absence[] = [
