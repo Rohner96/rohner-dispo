@@ -48,6 +48,7 @@ import { activeRepairsForEmployee, canChangeRepairStatus, repairStatusLabels, wo
 import { activeOnly, defaultAssignmentForDriver, projectsForCustomer } from './src/lib/masterData';
 import { buildDeliveryNoteData, downloadDeliveryNote } from './src/lib/deliveryNote';
 import { filterDrivers, isValidAbsenceRange } from './src/lib/absences';
+import { CalendarMode, calendarPeriodLabel, dayLabel, monthDateKeys, shiftCalendarDate, toDateKey, weekDateKeys } from './src/lib/calendar';
 
 type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
 
@@ -260,13 +261,31 @@ const absenceLabels = {
   unfall: 'Unfall',
 } satisfies Record<AbsenceType, string>;
 
-const weekDays = [
-  { date: '2026-08-10', label: 'Mo 10.8.' },
-  { date: '2026-08-11', label: 'Di 11.8.' },
-  { date: '2026-08-12', label: 'Mi 12.8.' },
-  { date: '2026-08-13', label: 'Do 13.8.' },
-  { date: '2026-08-14', label: 'Fr 14.8.' },
-];
+function CalendarDay({ date, orders, absencesData, repairs, projectsData, driversData, vehiclesData, mode }: { date: string; orders: TransportOrder[]; absencesData: Absence[]; repairs: RepairCase[]; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; mode: 'day' | 'week' | 'month' }) {
+  const dayOrders = orders.filter((order) => order.date === date);
+  const dayAbsences = absencesData.filter((absence) => date >= absence.from && date <= absence.to);
+  const dayRepairs = workshopRepairsOnDate(repairs, date);
+  const empty = dayOrders.length === 0 && dayAbsences.length === 0 && dayRepairs.length === 0;
+  return (
+    <View style={[styles.calendarColumn, mode === 'day' && styles.dayColumn, mode === 'month' && styles.monthColumn]}>
+      <Text style={styles.weekDay}>{dayLabel(date)}</Text>
+      {dayOrders.map((order) => {
+        const driver = lookup(driversData, order.driverId);
+        const project = lookup(projectsData, order.projectId);
+        return <View key={order.id} style={[styles.calendarOrder, { borderLeftColor: typeColors[order.type] }]}><Text style={styles.calendarTime}>{order.timeWindow}</Text><Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text><Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text></View>;
+      })}
+      {dayAbsences.map((absence) => {
+        const driver = lookup(driversData, absence.driverId);
+        return <View key={`${absence.id}-${date}`} style={styles.calendarAbsence}><Text style={styles.calendarTitle}>{driver?.name}</Text><Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text></View>;
+      })}
+      {dayRepairs.map((repair) => {
+        const vehicle = lookup(vehiclesData, repair.vehicleId);
+        return <View key={`${repair.id}-${date}`} style={styles.calendarRepair}><Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text><Text style={styles.calendarTitle}>{vehicle?.internalNumber} · {repair.title}</Text><Text style={styles.calendarMeta}>{repair.workshopName ?? 'Werkstatt offen'}</Text></View>;
+      })}
+      {empty ? <Text style={styles.calendarEmpty}>Noch frei</Text> : null}
+    </View>
+  );
+}
 
 function DispositionView({
   orders,
@@ -287,78 +306,48 @@ function DispositionView({
   trailersData: Trailer[];
   onNewOrder: () => void;
 }) {
-  const [calendarMode, setCalendarMode] = useState<'week' | 'list'>('week');
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>('week');
+  const [anchorDate, setAnchorDate] = useState(toDateKey(new Date()));
   const dates = [...new Set(orders.map((order) => order.date))].sort();
+  const visibleDates = calendarMode === 'day' ? [anchorDate] : calendarMode === 'week' ? weekDateKeys(anchorDate) : calendarMode === 'month' ? monthDateKeys(anchorDate) : [];
 
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeading}>
         <View style={styles.headingBlock}>
-          <Text style={styles.eyebrow}>AUFTRÄGE & PERSONAL</Text>
-          <Text style={styles.heading}>Wochenkalender</Text>
+          <Text style={styles.heading}>Kalender</Text>
         </View>
         <Pressable style={styles.primaryButton} onPress={onNewOrder}>
           <Text style={styles.primaryButtonText}>+ Auftrag</Text>
         </Pressable>
       </View>
       <View style={styles.calendarSwitch}>
+        <Pressable onPress={() => setCalendarMode('day')} style={[styles.navButton, calendarMode === 'day' && styles.navButtonActive]}>
+          <Text style={[styles.navText, calendarMode === 'day' && styles.navTextActive]}>Tag</Text>
+        </Pressable>
         <Pressable onPress={() => setCalendarMode('week')} style={[styles.navButton, calendarMode === 'week' && styles.navButtonActive]}>
           <Text style={[styles.navText, calendarMode === 'week' && styles.navTextActive]}>Woche</Text>
+        </Pressable>
+        <Pressable onPress={() => setCalendarMode('month')} style={[styles.navButton, calendarMode === 'month' && styles.navButtonActive]}>
+          <Text style={[styles.navText, calendarMode === 'month' && styles.navTextActive]}>Monat</Text>
         </Pressable>
         <Pressable onPress={() => setCalendarMode('list')} style={[styles.navButton, calendarMode === 'list' && styles.navButtonActive]}>
           <Text style={[styles.navText, calendarMode === 'list' && styles.navTextActive]}>Liste</Text>
         </Pressable>
       </View>
 
-      {calendarMode === 'week' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator>
-          <View style={styles.weekBoard}>
-            {weekDays.map((day) => {
-              const dayOrders = orders.filter((order) => order.date === day.date);
-              const dayAbsences = absencesData.filter((absence) => day.date >= absence.from && day.date <= absence.to);
-              const dayRepairs = workshopRepairsOnDate(repairs, day.date);
-              return (
-                <View key={day.date} style={styles.weekColumn}>
-                  <Text style={styles.weekDay}>{day.label}</Text>
-                  {dayOrders.map((order) => {
-                    const driver = lookup(driversData, order.driverId);
-                    const project = lookup(projectsData, order.projectId);
-                    return (
-                      <View key={order.id} style={[styles.calendarOrder, { borderLeftColor: typeColors[order.type] }]}>
-                        <Text style={styles.calendarTime}>{order.timeWindow}</Text>
-                        <Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text>
-                        <Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text>
-                      </View>
-                    );
-                  })}
-                  {dayAbsences.map((absence) => {
-                    const driver = lookup(driversData, absence.driverId);
-                    return (
-                      <View key={`${absence.id}-${day.date}`} style={styles.calendarAbsence}>
-                        <Text style={styles.calendarTitle}>{driver?.name}</Text>
-                        <Text style={styles.calendarMeta}>{absenceLabels[absence.type]}</Text>
-                      </View>
-                    );
-                  })}
-                  {dayRepairs.map((repair) => {
-                    const vehicle = lookup(vehiclesData, repair.vehicleId);
-                    return (
-                      <View key={`${repair.id}-${day.date}`} style={styles.calendarRepair}>
-                        <Text style={styles.calendarTime}>{repair.workshopTime ?? 'Zeit offen'} · WERKSTATT</Text>
-                        <Text style={styles.calendarTitle}>{vehicle?.internalNumber} · {repair.title}</Text>
-                        <Text style={styles.calendarMeta}>{repair.workshopName ?? 'Werkstatt offen'}</Text>
-                      </View>
-                    );
-                  })}
-                  {dayOrders.length === 0 && dayAbsences.length === 0 && dayRepairs.length === 0 && (
-                    <Text style={styles.calendarEmpty}>Noch frei</Text>
-                  )}
-                </View>
-              );
-            })}
+      {calendarMode !== 'list' ? <>
+        <View style={styles.calendarNavigator}>
+          <Pressable accessibilityLabel="Vorheriger Zeitraum" style={styles.calendarArrow} onPress={() => setAnchorDate((date) => shiftCalendarDate(date, calendarMode, -1))}><Text style={styles.calendarArrowText}>‹</Text></Pressable>
+          <Text style={styles.calendarPeriod}>{calendarPeriodLabel(anchorDate, calendarMode)}</Text>
+          <Pressable accessibilityLabel="Nächster Zeitraum" style={styles.calendarArrow} onPress={() => setAnchorDate((date) => shiftCalendarDate(date, calendarMode, 1))}><Text style={styles.calendarArrowText}>›</Text></Pressable>
+        </View>
+        <ScrollView horizontal={calendarMode !== 'day'} showsHorizontalScrollIndicator>
+          <View style={[styles.calendarBoard, calendarMode === 'month' && styles.monthBoard]}>
+            {visibleDates.map((date) => <CalendarDay key={date} date={date} orders={orders} absencesData={absencesData} repairs={repairs} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} mode={calendarMode} />)}
           </View>
         </ScrollView>
-      ) : (
+      </> : (
         dates.map((date) => (
           <View key={date} style={styles.dayBlock}>
             <Text style={styles.dayTitle}>{date}</Text>
@@ -1126,29 +1115,6 @@ function OfficeView({
   );
 }
 
-function SummaryBar({ orders, driversData, vehiclesData, trailersData }: { orders: TransportOrder[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[] }) {
-  return (
-    <View style={styles.stats}>
-      <View style={styles.stat}>
-        <Text style={styles.statValue}>{orders.length}</Text>
-        <Text style={styles.muted}>Aufträge</Text>
-      </View>
-      <View style={styles.stat}>
-        <Text style={styles.statValue}>{vehiclesData.filter((item) => item.active).length}</Text>
-        <Text style={styles.muted}>LKW</Text>
-      </View>
-      <View style={styles.stat}>
-        <Text style={styles.statValue}>{trailersData.filter((item) => item.active).length}</Text>
-        <Text style={styles.muted}>Anhänger</Text>
-      </View>
-      <View style={styles.stat}>
-        <Text style={styles.statValue}>{driversData.filter((item) => item.active).length}</Text>
-        <Text style={styles.muted}>Chauffeure</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser>();
   const [screen, setScreen] = useState<Screen>('calendar');
@@ -1332,8 +1298,6 @@ export default function App() {
             </Pressable>
           ) : null}
 
-          {isAdmin && <SummaryBar orders={orders} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} />}
-
           {isAdmin && screen === 'calendar' && (
             <DispositionView orders={orders} absencesData={absenceData} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} />
           )}
@@ -1381,9 +1345,6 @@ const styles = StyleSheet.create({
   navTextActive: { color: '#FFFFFF' },
   message: { marginHorizontal: 18, marginTop: 14, borderRadius: 10, padding: 12, backgroundColor: '#E4F2E8' },
   messageText: { color: '#0B4D27', fontWeight: '700' },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 18 },
-  stat: { minWidth: 130, flexGrow: 1, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#E2E8E2' },
-  statValue: { fontSize: 24, fontWeight: '900', color: '#0B4D27' },
   section: { paddingHorizontal: 18, paddingBottom: 40 },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 },
   headingBlock: { flexShrink: 1 },
@@ -1396,9 +1357,16 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: '#34443A', fontWeight: '800' },
   dayBlock: { marginBottom: 20 },
   dayTitle: { fontSize: 15, color: '#4B5B50', fontWeight: '800', marginBottom: 8 },
-  calendarSwitch: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  weekBoard: { flexDirection: 'row', gap: 10, paddingBottom: 12 },
-  weekColumn: { width: 210, minHeight: 250, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E0E6E1', padding: 11 },
+  calendarSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  calendarNavigator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E6E1', borderRadius: 12, padding: 8, marginBottom: 12 },
+  calendarArrow: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E7ECE8', borderRadius: 9 },
+  calendarArrowText: { color: '#0B4D27', fontSize: 28, fontWeight: '800', lineHeight: 30 },
+  calendarPeriod: { flex: 1, textAlign: 'center', color: '#142018', fontSize: 16, fontWeight: '900', textTransform: 'capitalize' },
+  calendarBoard: { width: '100%', flexDirection: 'row', gap: 10, paddingBottom: 12 },
+  monthBoard: { width: 1100, flexWrap: 'wrap', gap: 8 },
+  calendarColumn: { width: 200, minHeight: 250, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E0E6E1', padding: 11 },
+  dayColumn: { flex: 1, width: '100%', minHeight: 360 },
+  monthColumn: { width: 150, minHeight: 150, borderRadius: 9, padding: 8 },
   weekDay: { color: '#0B4D27', fontWeight: '900', marginBottom: 10 },
   calendarOrder: { borderLeftWidth: 5, backgroundColor: '#F4F7F4', borderRadius: 8, padding: 9, marginBottom: 8 },
   calendarAbsence: { backgroundColor: '#FFF5C7', borderRadius: 8, padding: 9, marginBottom: 8 },

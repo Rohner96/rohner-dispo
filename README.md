@@ -23,7 +23,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.11.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.12.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.12.0:
+
+- reduzierte Kalenderseite ohne Kennzahlenleiste
+- Überschrift nur noch «Kalender»
+- Tages-, Wochen-, Monats- und Listenansicht
+- Navigation zum vorherigen und nächsten Tag
+- Navigation zur vorherigen und nächsten Woche
+- Navigation zum vorherigen und nächsten Monat
+- Aufträge, Abwesenheiten und Werkstatttermine in allen Kalenderansichten
 
 Neu in Version 0.11.0:
 
