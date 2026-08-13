@@ -23,7 +23,15 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.15.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+Dies ist Version **0.16.0**. Die App verwendet bewusst noch Demodaten und speichert Änderungen bis zum Neustart der App im Arbeitsspeicher. Die angezeigten Testzugänge sind noch keine sicheren produktiven Benutzerkonten.
+
+Neu in Version 0.16.0:
+
+- nach dem Speichern automatisch zurück zur Stammdatenübersicht
+- bei LKW und Anhängern heisst die bisherige interne Nummer neu «Kurzform»
+- Feld «Interne Bezeichnung» für die ausführliche Bezeichnung
+- interne Bezeichnung ist die Hauptüberschrift in der LKW- und Anhängerliste
+- Kurzform und Fahrzeugart erscheinen als Detailinformationen darunter
 
 Neu in Version 0.15.0:
 

@@ -79,17 +79,17 @@ export function MasterDataView(props: Props) {
       const user: AppUser = { id: oldUser?.id ?? `user-${id}`, displayName: value.name, username, role: form.role === 'admin' ? 'admin' : 'employee', driverId: id, active: form.portalActive !== 'no' };
       props.onUsersChange(oldUser ? props.users.map((item) => item.id === oldUser.id ? user : item) : [...props.users, user]);
     } else if (detail.tab === 'vehicles') {
-      if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Interne Nummer und Bezeichnung sind erforderlich.');
+      if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Kurzform und interne Bezeichnung sind erforderlich.');
       const old = props.vehicles.find((item) => item.id === id);
       const value: Vehicle = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category: (form.category || 'kipper') as OrderType, active: old?.active ?? true };
       props.onVehiclesChange(old ? props.vehicles.map((item) => item.id === id ? value : item) : [...props.vehicles, value]);
     } else {
-      if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Interne Nummer und Bezeichnung sind erforderlich.');
+      if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Kurzform und interne Bezeichnung sind erforderlich.');
       const old = props.trailers.find((item) => item.id === id);
       const value: Trailer = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), active: old?.active ?? true };
       props.onTrailersChange(old ? props.trailers.map((item) => item.id === id ? value : item) : [...props.trailers, value]);
     }
-    setError(''); setDetail({ ...detail, id });
+    setError(''); setDetail(undefined);
   }
 
   function toggleCurrent() {
@@ -129,8 +129,8 @@ export function MasterDataView(props: Props) {
       {detail.tab === 'drivers' && <><Field label="Personalnummer" value={form.personnelNumber} onChange={(v) => change('personnelNumber', v)} /><Field label="Vor- und Nachname" value={form.name} onChange={(v) => change('name', v)} /><Field label="Adresse / Wohnort" value={form.address} onChange={(v) => change('address', v)} /><Field label="Telefon" value={form.phone} onChange={(v) => change('phone', v)} /><Field label="E-Mail-Adresse" value={form.email} onChange={(v) => change('email', v)} /><Field label="Funktion" value={form.function} onChange={(v) => change('function', v)} /><Field label="Eintrittsdatum" value={form.employmentStart} onChange={(v) => change('employmentStart', v)} /><Field label="Arbeitspensum in %" value={form.employmentPercentage} onChange={(v) => change('employmentPercentage', v)} /><Field label="Interne Bemerkungen" value={form.notes} onChange={(v) => change('notes', v)} />
         <Text style={styles.groupTitle}>Standardgespann</Text><OptionGroup label="Standard-LKW" options={[{ value: '', label: 'Keine Vorgabe' }, ...props.vehicles.filter((i) => i.active).map((i) => ({ value: i.id, label: `${i.internalNumber} · ${i.label}` }))]} selected={form.defaultVehicleId ?? ''} onSelect={(v) => change('defaultVehicleId', v)} /><OptionGroup label="Standard-Anhänger" options={[{ value: 'none', label: 'Ohne Anhänger' }, ...props.trailers.filter((i) => i.active).map((i) => ({ value: i.id, label: `${i.internalNumber} · ${i.label}` }))]} selected={form.defaultTrailerId ?? 'none'} onSelect={(v) => change('defaultTrailerId', v)} />
         <Text style={styles.groupTitle}>Portalzugang</Text><Field label="Benutzername" value={form.username} onChange={(v) => change('username', v)} /><OptionGroup label="Berechtigung" options={[{ value: 'employee', label: 'Mitarbeiter' }, { value: 'admin', label: 'Administrator' }]} selected={form.role ?? 'employee'} onSelect={(v) => change('role', v)} /><OptionGroup label="Portalzugang" options={[{ value: 'yes', label: 'Aktiv' }, { value: 'no', label: 'Gesperrt' }]} selected={form.portalActive ?? 'yes'} onSelect={(v) => change('portalActive', v)} /><Text style={styles.warning}>Testpasswort: «demo». Passwörter werden nicht in den Stammdaten gespeichert.</Text></>}
-      {detail.tab === 'vehicles' && <><Field label="Interne Nummer" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={(v) => change('category', v)} /></>}
-      {detail.tab === 'trailers' && <><Field label="Interne Nummer" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Bezeichnung / Art" value={form.label} onChange={(v) => change('label', v)} /></>}
+      {detail.tab === 'vehicles' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={(v) => change('category', v)} /></>}
+      {detail.tab === 'trailers' && <><Field label="Kurzform" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /></>}
       {error ? <Text style={styles.error}>{error}</Text> : null}<View style={styles.formActions}><Pressable style={styles.saveButton} onPress={saveDetail}><Text style={styles.saveText}>Speichern</Text></Pressable>{detail.id !== 'new' ? <Pressable style={[styles.stateButton, !detailActive && styles.activateButton]} onPress={toggleCurrent}><Text style={[styles.stateText, !detailActive && styles.activateText]}>{detailActive ? 'Deaktivieren' : 'Aktivieren'}</Text></Pressable> : null}</View>
     </View>
     {customer ? <><DetailSection title="Ansprechpersonen" action="+ Kontakt" onAction={() => { setContactId('new'); setContactForm({}); }}>
@@ -146,8 +146,8 @@ export function MasterDataView(props: Props) {
     <View style={styles.tabs}>{tabs.map((item) => <Pressable key={item.value} onPress={() => setTab(item.value)} style={[styles.tab, tab === item.value && styles.tabActive]}><Text style={[styles.tabText, tab === item.value && styles.tabTextActive]}>{item.label}</Text></Pressable>)}</View>
     {tab === 'customers' && props.customers.map((item) => <ListRow key={item.id} title={`${item.customerNumber} · ${item.name}`} subtitle={`${item.address || 'Keine Adresse'} · ${item.contacts.length} Kontakt(e) · ${props.projects.filter((p) => p.customerId === item.id).length} Projekt(e)`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
     {tab === 'drivers' && props.drivers.map((item) => { const vehicle = props.vehicles.find((v) => v.id === item.defaultVehicleId); const trailer = props.trailers.find((t) => t.id === item.defaultTrailerId); return <ListRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={`${item.function || 'Mitarbeiter'} · ${vehicle?.internalNumber || 'Kein Standard-LKW'}${trailer ? ` + ${trailer.internalNumber}` : ''}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />; })}
-    {tab === 'vehicles' && props.vehicles.map((item) => <ListRow key={item.id} title={`${item.internalNumber} · ${item.label}`} subtitle={vehicleTypes.find((type) => type.value === item.category)?.label} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
-    {tab === 'trailers' && props.trailers.map((item) => <ListRow key={item.id} title={`${item.internalNumber} · ${item.label}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'vehicles' && props.vehicles.map((item) => <ListRow key={item.id} title={item.label} subtitle={`${item.internalNumber} · ${vehicleTypes.find((type) => type.value === item.category)?.label ?? 'Fahrzeugart offen'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'trailers' && props.trailers.map((item) => <ListRow key={item.id} title={item.label} subtitle={`Kurzform: ${item.internalNumber}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
   </View>;
 }
 
