@@ -47,8 +47,9 @@ export interface WorkflowEvent {
 
 export type AbsenceType = 'ferien' | 'kompensation' | 'krank' | 'unfall';
 
-export type VehicleCategory = 'sattelschlepper' | 'kipper' | 'silo' | 'fahrmischer';
+export type VehicleCategory = 'sattelschlepper' | 'kipper' | 'silo' | 'fahrmischer' | 'wechselsystem';
 export type VehicleAxleConfiguration = '2-achs' | '3-achs' | '4-achs' | '5-achs';
+export type VehicleBodyType = 'kipper' | 'silo' | 'fahrmischer';
 export type CraneCapacity = 22 | 23 | 30 | 54;
 export type TrailerCategory = 'kippsattel' | 'semi_tieflader_ohne_kran' | 'semi_tieflader_mit_kran';
 
@@ -67,6 +68,7 @@ export interface Vehicle {
   label: string;
   category: VehicleCategory;
   axleConfiguration: VehicleAxleConfiguration;
+  bodyTypes?: VehicleBodyType[];
   hasCrane: boolean;
   craneCapacity?: CraneCapacity;
   active: boolean;
@@ -83,8 +85,12 @@ export interface Trailer {
 export interface Driver {
   id: string;
   personnelNumber?: string;
+  firstName?: string;
+  lastName?: string;
   name: string;
   address?: string;
+  postalCode?: string;
+  city?: string;
   phone?: string;
   email?: string;
   function?: string;

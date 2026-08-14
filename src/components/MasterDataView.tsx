@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppUser } from '../auth/demoAuth';
-import { CraneCapacity, Customer, CustomerContact, Driver, Project, Trailer, TrailerCategory, Vehicle, VehicleAxleConfiguration, VehicleCategory } from '../domain/models';
-import { axleConfigurationsForVehicle, toggleActive } from '../lib/masterData';
+import { CraneCapacity, Customer, CustomerContact, Driver, Project, Trailer, TrailerCategory, Vehicle, VehicleAxleConfiguration, VehicleBodyType, VehicleCategory } from '../domain/models';
+import { axleConfigurationsForVehicle, driverNameParts, sortCustomersByCustomerNumber, sortDriversByLastName, sortTrailersByInternalNumber, sortVehiclesByInternalNumber, toggleActive, vehicleCategoryHasSelectableAxles, vehicleCategorySupportsBodyTypes, vehicleCategorySupportsCrane } from '../lib/masterData';
 
 type Tab = 'customers' | 'drivers' | 'vehicles' | 'trailers';
 type Detail = { tab: Tab; id: string };
@@ -15,8 +15,14 @@ const tabs: { value: Tab; label: string; singular: string }[] = [
 const vehicleTypes: { value: VehicleCategory; label: string }[] = [
   { value: 'sattelschlepper', label: 'Sattelschlepper' }, { value: 'kipper', label: 'Kipper' },
   { value: 'silo', label: 'Silowagen' }, { value: 'fahrmischer', label: 'Fahrmischer' },
+  { value: 'wechselsystem', label: 'Wechselsystem' },
 ];
-const axleLabels: Record<VehicleAxleConfiguration, string> = { '2-achs': 'Zweiachs', '3-achs': 'Dreiachs', '4-achs': 'Vierachs', '5-achs': 'Fünfachs' };
+const vehicleBodyTypes: { value: VehicleBodyType; label: string }[] = [
+  { value: 'kipper', label: 'Kipper' },
+  { value: 'silo', label: 'Silowagen' },
+  { value: 'fahrmischer', label: 'Fahrmischer' },
+];
+const axleLabels: Record<VehicleAxleConfiguration, string> = { '2-achs': '2-Achs', '3-achs': '3-Achs', '4-achs': '4-Achs', '5-achs': '5-Achs' };
 const craneCapacities: CraneCapacity[] = [22, 23, 30, 54];
 const trailerTypes: { value: TrailerCategory; label: string }[] = [
   { value: 'kippsattel', label: 'Kippsattel' },
@@ -55,10 +61,11 @@ export function MasterDataView(props: Props) {
     } else if (targetTab === 'drivers') {
       const value = props.drivers.find((item) => item.id === id)!;
       const user = props.users.find((item) => item.driverId === id);
-      setForm({ personnelNumber: value.personnelNumber ?? '', name: value.name, address: value.address ?? '', phone: value.phone ?? '', email: value.email ?? '', function: value.function ?? 'Chauffeur', employmentStart: value.employmentStart ?? '', employmentPercentage: value.employmentPercentage ? String(value.employmentPercentage) : '100', notes: value.notes ?? '', defaultVehicleId: value.defaultVehicleId ?? '', defaultTrailerId: value.defaultTrailerId ?? 'none', username: user?.username ?? '', role: user?.role ?? 'employee', portalActive: user?.active === false ? 'no' : 'yes' });
+      const name = driverNameParts(value);
+      setForm({ personnelNumber: value.personnelNumber ?? '', firstName: name.firstName, lastName: name.lastName, address: value.address ?? '', postalCode: value.postalCode ?? '', city: value.city ?? '', phone: value.phone ?? '', email: value.email ?? '', function: value.function ?? 'Chauffeur', employmentStart: value.employmentStart ?? '', employmentPercentage: value.employmentPercentage ? String(value.employmentPercentage) : '100', notes: value.notes ?? '', defaultVehicleId: value.defaultVehicleId ?? '', defaultTrailerId: value.defaultTrailerId ?? 'none', username: user?.username ?? '', role: user?.role ?? 'employee', portalActive: user?.active === false ? 'no' : 'yes' });
     } else if (targetTab === 'vehicles') {
       const value = props.vehicles.find((item) => item.id === id)!;
-      setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category, axleConfiguration: value.axleConfiguration, hasCrane: value.hasCrane ? 'yes' : 'no', craneCapacity: value.craneCapacity ? String(value.craneCapacity) : '' });
+      setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category, axleConfiguration: value.axleConfiguration, bodyTypes: value.bodyTypes?.join(',') ?? '', hasCrane: value.hasCrane ? 'yes' : 'no', craneCapacity: value.craneCapacity ? String(value.craneCapacity) : '' });
     } else {
       const value = props.trailers.find((item) => item.id === id)!;
       setForm({ internalNumber: value.internalNumber, label: value.label, category: value.category });
@@ -75,11 +82,12 @@ export function MasterDataView(props: Props) {
       props.onCustomersChange(old ? props.customers.map((item) => item.id === id ? value : item) : [...props.customers, value]);
       if (old?.name !== value.name) props.onProjectsChange(props.projects.map((item) => item.customerId === id ? { ...item, customerName: value.name } : item));
     } else if (detail.tab === 'drivers') {
-      if (!form.name?.trim() || !form.username?.trim()) return setError('Name und Benutzername sind erforderlich.');
+      if (!form.firstName?.trim() || !form.lastName?.trim() || !form.username?.trim()) return setError('Vorname, Nachname und Benutzername sind erforderlich.');
       const username = form.username.trim().toLowerCase();
       if (props.users.some((item) => item.username.toLowerCase() === username && item.driverId !== id)) return setError('Dieser Benutzername wird bereits verwendet.');
       const old = props.drivers.find((item) => item.id === id); const percentage = Number(form.employmentPercentage);
-      const value: Driver = { id, personnelNumber: form.personnelNumber?.trim(), name: form.name.trim(), address: form.address?.trim(), phone: form.phone?.trim(), email: form.email?.trim(), function: form.function?.trim(), employmentStart: form.employmentStart?.trim(), employmentPercentage: Number.isFinite(percentage) ? percentage : undefined, notes: form.notes?.trim(), defaultVehicleId: form.defaultVehicleId || undefined, defaultTrailerId: form.defaultTrailerId && form.defaultTrailerId !== 'none' ? form.defaultTrailerId : undefined, active: old?.active ?? true };
+      const firstName = form.firstName.trim(); const lastName = form.lastName.trim();
+      const value: Driver = { id, personnelNumber: form.personnelNumber?.trim(), firstName, lastName, name: `${firstName} ${lastName}`, address: form.address?.trim(), postalCode: form.postalCode?.trim(), city: form.city?.trim(), phone: form.phone?.trim(), email: form.email?.trim(), function: form.function?.trim(), employmentStart: form.employmentStart?.trim(), employmentPercentage: Number.isFinite(percentage) ? percentage : undefined, notes: form.notes?.trim(), defaultVehicleId: form.defaultVehicleId || undefined, defaultTrailerId: form.defaultTrailerId && form.defaultTrailerId !== 'none' ? form.defaultTrailerId : undefined, active: old?.active ?? true };
       props.onDriversChange(old ? props.drivers.map((item) => item.id === id ? value : item) : [...props.drivers, value]);
       const oldUser = props.users.find((item) => item.driverId === id);
       const user: AppUser = { id: oldUser?.id ?? `user-${id}`, displayName: value.name, username, role: form.role === 'admin' ? 'admin' : 'employee', driverId: id, active: form.portalActive !== 'no' };
@@ -88,10 +96,15 @@ export function MasterDataView(props: Props) {
       if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('LKW-Nummer und interne Bezeichnung sind erforderlich.');
       const category = (form.category || 'kipper') as VehicleCategory;
       const allowedAxles = axleConfigurationsForVehicle(category);
-      if (!allowedAxles.includes(form.axleConfiguration as VehicleAxleConfiguration)) return setError('Bitte eine passende Achsausführung auswählen.');
-      if (form.hasCrane === 'yes' && !craneCapacities.includes(Number(form.craneCapacity) as CraneCapacity)) return setError('Bitte die Kranleistung auswählen.');
+      const supportsCrane = vehicleCategorySupportsCrane(category);
+      const axleConfiguration = category === 'wechselsystem' ? '5-achs' : form.axleConfiguration as VehicleAxleConfiguration;
+      const bodyTypes = (form.bodyTypes?.split(',').filter(Boolean) ?? []) as VehicleBodyType[];
+      if (!allowedAxles.includes(axleConfiguration)) return setError('Bitte eine passende Achsausführung auswählen.');
+      if (vehicleCategorySupportsBodyTypes(category) && bodyTypes.length === 0) return setError('Bitte mindestens eine Aufbauart auswählen.');
+      if (supportsCrane && form.hasCrane === 'yes' && !craneCapacities.includes(Number(form.craneCapacity) as CraneCapacity)) return setError('Bitte die Kranleistung auswählen.');
       const old = props.vehicles.find((item) => item.id === id);
-      const value: Vehicle = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category, axleConfiguration: form.axleConfiguration as VehicleAxleConfiguration, hasCrane: form.hasCrane === 'yes', craneCapacity: form.hasCrane === 'yes' ? Number(form.craneCapacity) as CraneCapacity : undefined, active: old?.active ?? true };
+      const hasCrane = supportsCrane && form.hasCrane === 'yes';
+      const value: Vehicle = { id, internalNumber: form.internalNumber.trim(), label: form.label.trim(), category, axleConfiguration, bodyTypes: vehicleCategorySupportsBodyTypes(category) ? bodyTypes : undefined, hasCrane, craneCapacity: hasCrane ? Number(form.craneCapacity) as CraneCapacity : undefined, active: old?.active ?? true };
       props.onVehiclesChange(old ? props.vehicles.map((item) => item.id === id ? value : item) : [...props.vehicles, value]);
     } else {
       if (!form.internalNumber?.trim() || !form.label?.trim()) return setError('Anhängernummer und interne Bezeichnung sind erforderlich.');
@@ -118,11 +131,27 @@ export function MasterDataView(props: Props) {
   const customer = detail?.tab === 'customers' && detail.id !== 'new' ? props.customers.find((item) => item.id === detail.id) : undefined;
   const selectedVehicleCategory = (form.category || 'kipper') as VehicleCategory;
   const vehicleAxleOptions = axleConfigurationsForVehicle(selectedVehicleCategory).map((value) => ({ value, label: axleLabels[value] }));
+  const selectedVehicleBodyTypes = (form.bodyTypes?.split(',').filter(Boolean) ?? []) as VehicleBodyType[];
 
   function changeVehicleCategory(value: string) {
     const category = value as VehicleCategory;
     const allowedAxles = axleConfigurationsForVehicle(category);
-    setForm((current) => ({ ...current, category, axleConfiguration: allowedAxles.includes(current.axleConfiguration as VehicleAxleConfiguration) ? current.axleConfiguration! : allowedAxles[0]! }));
+    setForm((current) => ({
+      ...current,
+      category,
+      axleConfiguration: allowedAxles.includes(current.axleConfiguration as VehicleAxleConfiguration) ? current.axleConfiguration! : allowedAxles[0]!,
+      ...(!vehicleCategorySupportsCrane(category) ? { hasCrane: 'no', craneCapacity: '' } : {}),
+      ...(!vehicleCategorySupportsBodyTypes(category) ? { bodyTypes: '' } : {}),
+    }));
+  }
+
+  function toggleVehicleBodyType(value: string) {
+    const bodyType = value as VehicleBodyType;
+    setForm((current) => {
+      const selected = (current.bodyTypes?.split(',').filter(Boolean) ?? []) as VehicleBodyType[];
+      const next = selected.includes(bodyType) ? selected.filter((item) => item !== bodyType) : [...selected, bodyType];
+      return { ...current, bodyTypes: next.join(',') };
+    });
   }
 
   function saveContact() {
@@ -141,13 +170,13 @@ export function MasterDataView(props: Props) {
 
   if (detail) return <View style={styles.section}>
     <Pressable style={styles.backButton} onPress={() => setDetail(undefined)}><Text style={styles.backText}>← Zur Übersicht</Text></Pressable>
-    <Text style={styles.eyebrow}>DETAILS</Text><Text style={styles.heading}>{detail.id === 'new' ? `${currentLabel.singular} erfassen` : detail.tab === 'vehicles' || detail.tab === 'trailers' ? form.internalNumber : form.name}</Text>
+    <Text style={styles.eyebrow}>DETAILS</Text><Text style={styles.heading}>{detail.id === 'new' ? `${currentLabel.singular} erfassen` : detail.tab === 'vehicles' || detail.tab === 'trailers' ? form.internalNumber : detail.tab === 'drivers' ? `${form.firstName ?? ''} ${form.lastName ?? ''}`.trim() : form.name}</Text>
     <View style={styles.formCard}>
       {detail.tab === 'customers' && <><Field label="Kundennummer" value={form.customerNumber} onChange={(v) => change('customerNumber', v)} /><Field label="Kundenname" value={form.name} onChange={(v) => change('name', v)} /><Field label="Adresse / Ort" value={form.address} onChange={(v) => change('address', v)} /></>}
-      {detail.tab === 'drivers' && <><Field label="Personalnummer" value={form.personnelNumber} onChange={(v) => change('personnelNumber', v)} /><Field label="Vor- und Nachname" value={form.name} onChange={(v) => change('name', v)} /><Field label="Adresse / Wohnort" value={form.address} onChange={(v) => change('address', v)} /><Field label="Telefon" value={form.phone} onChange={(v) => change('phone', v)} /><Field label="E-Mail-Adresse" value={form.email} onChange={(v) => change('email', v)} /><Field label="Funktion" value={form.function} onChange={(v) => change('function', v)} /><Field label="Eintrittsdatum" value={form.employmentStart} onChange={(v) => change('employmentStart', v)} /><Field label="Arbeitspensum in %" value={form.employmentPercentage} onChange={(v) => change('employmentPercentage', v)} /><Field label="Interne Bemerkungen" value={form.notes} onChange={(v) => change('notes', v)} />
+      {detail.tab === 'drivers' && <><Field label="Personalnummer" value={form.personnelNumber} onChange={(v) => change('personnelNumber', v)} /><Field label="Vorname" value={form.firstName} onChange={(v) => change('firstName', v)} /><Field label="Nachname" value={form.lastName} onChange={(v) => change('lastName', v)} /><Field label="Adresse" value={form.address} onChange={(v) => change('address', v)} /><Field label="Postleitzahl" value={form.postalCode} onChange={(v) => change('postalCode', v)} /><Field label="Wohnort" value={form.city} onChange={(v) => change('city', v)} /><Field label="Telefon" value={form.phone} onChange={(v) => change('phone', v)} /><Field label="E-Mail-Adresse" value={form.email} onChange={(v) => change('email', v)} /><Field label="Funktion" value={form.function} onChange={(v) => change('function', v)} /><Field label="Eintrittsdatum" value={form.employmentStart} onChange={(v) => change('employmentStart', v)} /><Field label="Arbeitspensum in %" value={form.employmentPercentage} onChange={(v) => change('employmentPercentage', v)} /><Field label="Interne Bemerkungen" value={form.notes} onChange={(v) => change('notes', v)} />
         <Text style={styles.groupTitle}>Standardgespann</Text><OptionGroup label="Standard-LKW" options={[{ value: '', label: 'Keine Vorgabe' }, ...props.vehicles.filter((i) => i.active).map((i) => ({ value: i.id, label: i.internalNumber }))]} selected={form.defaultVehicleId ?? ''} onSelect={(v) => change('defaultVehicleId', v)} /><OptionGroup label="Standard-Anhänger" options={[{ value: 'none', label: 'Ohne Anhänger' }, ...props.trailers.filter((i) => i.active).map((i) => ({ value: i.id, label: i.internalNumber }))]} selected={form.defaultTrailerId ?? 'none'} onSelect={(v) => change('defaultTrailerId', v)} />
         <Text style={styles.groupTitle}>Portalzugang</Text><Field label="Benutzername" value={form.username} onChange={(v) => change('username', v)} /><OptionGroup label="Berechtigung" options={[{ value: 'employee', label: 'Mitarbeiter' }, { value: 'admin', label: 'Administrator' }]} selected={form.role ?? 'employee'} onSelect={(v) => change('role', v)} /><OptionGroup label="Portalzugang" options={[{ value: 'yes', label: 'Aktiv' }, { value: 'no', label: 'Gesperrt' }]} selected={form.portalActive ?? 'yes'} onSelect={(v) => change('portalActive', v)} /><Text style={styles.warning}>Testpasswort: «demo». Passwörter werden nicht in den Stammdaten gespeichert.</Text></>}
-      {detail.tab === 'vehicles' && <><Field label="LKW-Nummer" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={changeVehicleCategory} /><OptionGroup label="Achsausführung" options={vehicleAxleOptions} selected={form.axleConfiguration ?? vehicleAxleOptions[0]?.value ?? ''} onSelect={(v) => change('axleConfiguration', v)} /><OptionGroup label="Kran vorhanden" options={[{ value: 'no', label: 'Nein' }, { value: 'yes', label: 'Ja' }]} selected={form.hasCrane ?? 'no'} onSelect={(v) => { change('hasCrane', v); if (v === 'no') change('craneCapacity', ''); }} />{form.hasCrane === 'yes' ? <OptionGroup label="Kranleistung" options={craneCapacities.map((capacity) => ({ value: String(capacity), label: `${capacity} Metertonnen` }))} selected={form.craneCapacity ?? ''} onSelect={(v) => change('craneCapacity', v)} /> : null}</>}
+      {detail.tab === 'vehicles' && <><Field label="LKW-Nummer" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Fahrzeugart" options={vehicleTypes} selected={form.category ?? 'kipper'} onSelect={changeVehicleCategory} />{vehicleCategoryHasSelectableAxles(selectedVehicleCategory) ? <OptionGroup label="Achsausführung" options={vehicleAxleOptions} selected={form.axleConfiguration ?? vehicleAxleOptions[0]?.value ?? ''} onSelect={(v) => change('axleConfiguration', v)} /> : null}{vehicleCategorySupportsBodyTypes(selectedVehicleCategory) ? <MultiOptionGroup label="Aufbauarten" options={vehicleBodyTypes} selected={selectedVehicleBodyTypes} onToggle={toggleVehicleBodyType} /> : null}{vehicleCategorySupportsCrane(selectedVehicleCategory) ? <><OptionGroup label="Kran vorhanden" options={[{ value: 'no', label: 'Nein' }, { value: 'yes', label: 'Ja' }]} selected={form.hasCrane ?? 'no'} onSelect={(v) => { change('hasCrane', v); if (v === 'no') change('craneCapacity', ''); }} />{form.hasCrane === 'yes' ? <OptionGroup label="Kranleistung" options={craneCapacities.map((capacity) => ({ value: String(capacity), label: `${capacity} Metertonnen` }))} selected={form.craneCapacity ?? ''} onSelect={(v) => change('craneCapacity', v)} /> : null}</> : null}</>}
       {detail.tab === 'trailers' && <><Field label="Anhängernummer" value={form.internalNumber} onChange={(v) => change('internalNumber', v)} /><Field label="Interne Bezeichnung" value={form.label} onChange={(v) => change('label', v)} /><OptionGroup label="Anhängerart" options={trailerTypes} selected={form.category ?? 'kippsattel'} onSelect={(v) => change('category', v)} /></>}
       {error ? <Text style={styles.error}>{error}</Text> : null}<View style={styles.formActions}><Pressable style={styles.saveButton} onPress={saveDetail}><Text style={styles.saveText}>Speichern</Text></Pressable>{detail.id !== 'new' ? <Pressable style={[styles.stateButton, !detailActive && styles.activateButton]} onPress={toggleCurrent}><Text style={[styles.stateText, !detailActive && styles.activateText]}>{detailActive ? 'Deaktivieren' : 'Aktivieren'}</Text></Pressable> : null}</View>
     </View>
@@ -162,15 +191,16 @@ export function MasterDataView(props: Props) {
 
   return <View style={styles.section}><Text style={styles.eyebrow}>ADMINISTRATION</Text><View style={styles.headingRow}><View><Text style={styles.heading}>Stammdaten</Text><Text style={styles.sub}>Eintrag öffnen und in der Detailmaske bearbeiten.</Text></View><Pressable style={styles.addButton} onPress={() => openDetail(tab, 'new')}><Text style={styles.addText}>+ {currentLabel.singular}</Text></Pressable></View>
     <View style={styles.tabs}>{tabs.map((item) => <Pressable key={item.value} onPress={() => setTab(item.value)} style={[styles.tab, tab === item.value && styles.tabActive]}><Text style={[styles.tabText, tab === item.value && styles.tabTextActive]}>{item.label}</Text></Pressable>)}</View>
-    {tab === 'customers' && props.customers.map((item) => <ListRow key={item.id} title={`${item.customerNumber} · ${item.name}`} subtitle={`${item.address || 'Keine Adresse'} · ${item.contacts.length} Kontakt(e) · ${props.projects.filter((p) => p.customerId === item.id).length} Projekt(e)`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
-    {tab === 'drivers' && props.drivers.map((item) => { const vehicle = props.vehicles.find((v) => v.id === item.defaultVehicleId); const trailer = props.trailers.find((t) => t.id === item.defaultTrailerId); return <ListRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={`${item.function || 'Mitarbeiter'} · ${vehicle?.internalNumber || 'Kein Standard-LKW'}${trailer ? ` + ${trailer.internalNumber}` : ''}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />; })}
-    {tab === 'vehicles' && props.vehicles.map((item) => <ListRow key={item.id} title={item.internalNumber} subtitle={`${item.label} · ${vehicleTypes.find((type) => type.value === item.category)?.label ?? 'Fahrzeugart offen'} · ${axleLabels[item.axleConfiguration]}${item.hasCrane ? ` · Kran ${item.craneCapacity} Metertonnen` : ' · Ohne Kran'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
-    {tab === 'trailers' && props.trailers.map((item) => <ListRow key={item.id} title={item.internalNumber} subtitle={`${item.label} · ${trailerTypes.find((type) => type.value === item.category)?.label ?? 'Anhängerart offen'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'customers' && sortCustomersByCustomerNumber(props.customers).map((item) => <ListRow key={item.id} title={`${item.customerNumber} · ${item.name}`} subtitle={`${item.address || 'Keine Adresse'} · ${item.contacts.length} Kontakt(e) · ${props.projects.filter((p) => p.customerId === item.id).length} Projekt(e)`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'drivers' && sortDriversByLastName(props.drivers).map((item) => { const vehicle = props.vehicles.find((v) => v.id === item.defaultVehicleId); const trailer = props.trailers.find((t) => t.id === item.defaultTrailerId); return <ListRow key={item.id} title={`${item.personnelNumber || 'Ohne Nr.'} · ${item.name}`} subtitle={`${item.function || 'Mitarbeiter'} · ${vehicle?.internalNumber || 'Kein Standard-LKW'}${trailer ? ` + ${trailer.internalNumber}` : ''}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />; })}
+    {tab === 'vehicles' && sortVehiclesByInternalNumber(props.vehicles).map((item) => <ListRow key={item.id} title={item.internalNumber} subtitle={`${item.label} · ${vehicleTypes.find((type) => type.value === item.category)?.label ?? 'Fahrzeugart offen'}${item.category === 'wechselsystem' ? ` · ${(item.bodyTypes ?? []).map((value) => vehicleBodyTypes.find((type) => type.value === value)?.label).filter(Boolean).join(', ') || 'Aufbauart offen'}` : ` · ${axleLabels[item.axleConfiguration]}`}${item.hasCrane ? ` · Kran ${item.craneCapacity} Metertonnen` : item.category === 'sattelschlepper' ? ' · Ohne Kran' : ''}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
+    {tab === 'trailers' && sortTrailersByInternalNumber(props.trailers).map((item) => <ListRow key={item.id} title={item.internalNumber} subtitle={`${item.label} · ${trailerTypes.find((type) => type.value === item.category)?.label ?? 'Anhängerart offen'}`} active={item.active} onDetails={() => openDetail(tab, item.id)} />)}
   </View>;
 }
 
 function Field({ label, value, onChange }: { label: string; value?: string; onChange: (value: string) => void }) { return <View><Text style={styles.label}>{label}</Text><TextInput style={styles.input} value={value ?? ''} onChangeText={onChange} /></View>; }
 function OptionGroup({ label, options, selected, onSelect }: { label: string; options: { value: string; label: string }[]; selected: string; onSelect: (value: string) => void }) { return <><Text style={styles.label}>{label}</Text><View style={styles.options}>{options.map((item) => <Pressable key={item.value || 'empty'} onPress={() => onSelect(item.value)} style={[styles.option, selected === item.value && styles.optionActive]}><Text style={[styles.optionText, selected === item.value && styles.optionTextActive]}>{item.label}</Text></Pressable>)}</View></>; }
+function MultiOptionGroup({ label, options, selected, onToggle }: { label: string; options: { value: string; label: string }[]; selected: string[]; onToggle: (value: string) => void }) { return <><Text style={styles.label}>{label}</Text><View style={styles.options}>{options.map((item) => { const active = selected.includes(item.value); return <Pressable key={item.value} onPress={() => onToggle(item.value)} style={[styles.option, active && styles.optionActive]}><Text style={[styles.optionText, active && styles.optionTextActive]}>{item.label}</Text></Pressable>; })}</View></>; }
 function ListRow({ title, subtitle, active, onDetails }: { title: string; subtitle?: string; active: boolean; onDetails: () => void }) { return <View style={[styles.dataRow, !active && styles.inactiveRow]}><View style={styles.rowMain}><Text style={styles.rowTitle}>{title}</Text>{subtitle ? <Text style={styles.rowSub}>{subtitle}</Text> : null}<Text style={[styles.status, !active && styles.inactiveStatus]}>{active ? 'Aktiv' : 'Inaktiv'}</Text></View><Pressable style={styles.detailsButton} onPress={onDetails}><Text style={styles.detailsText}>Details</Text></Pressable></View>; }
 function DetailRow({ title, subtitle, onDetails }: { title: string; subtitle?: string; onDetails: () => void }) { return <View style={styles.detailRow}><View style={styles.rowMain}><Text style={styles.rowTitle}>{title}</Text>{subtitle ? <Text style={styles.rowSub}>{subtitle}</Text> : null}</View><Pressable style={styles.detailsButton} onPress={onDetails}><Text style={styles.detailsText}>Details</Text></Pressable></View>; }
 function DetailSection({ title, action, onAction, children }: { title: string; action: string; onAction: () => void; children: React.ReactNode }) { return <View style={styles.detailSection}><View style={styles.detailHeading}><Text style={styles.detailTitle}>{title}</Text><Pressable style={styles.addButton} onPress={onAction}><Text style={styles.addText}>{action}</Text></Pressable></View>{children}</View>; }

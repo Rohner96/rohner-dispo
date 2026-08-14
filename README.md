@@ -22,7 +22,18 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.23.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+Dies ist Version **0.24.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+
+Neu in Version 0.24.0:
+
+- Mitarbeitermaske mit getrennten Feldern für Vorname, Nachname, Adresse, Postleitzahl und Wohnort
+- Mitarbeiterübersicht alphabetisch nach Nachnamen sortiert
+- LKW, Anhänger und Kunden natürlich aufsteigend nach ihren Nummern sortiert
+- Achsausführungen einheitlich als 2-Achs, 3-Achs, 4-Achs und 5-Achs bezeichnet
+- Kranangaben werden nur noch bei der Fahrzeugart Sattelschlepper angezeigt und gespeichert
+- neue Fahrzeugart Wechselsystem mit fester 5-Achs-Ausführung
+- beim Wechselsystem können Kipper, Silowagen und Fahrmischer einzeln oder kombiniert als Aufbauarten gewählt werden
+- bestehende Mitarbeiter- und Fahrzeugdaten sowie Portalverknüpfungen bleiben kompatibel
 
 Neu in Version 0.23.0:
 

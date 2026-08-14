@@ -7,9 +7,9 @@ export const customers: Customer[] = [
 ];
 
 export const drivers: Driver[] = [
-  { id: 'd1', personnelNumber: 'P001', name: 'René Rohner', address: 'Siglistorf', phone: '+41 79 000 00 01', email: 'rene@rohner-demo.ch', function: 'Chauffeur', employmentStart: '2020-03-01', employmentPercentage: 100, defaultVehicleId: 'v2', active: true },
-  { id: 'd2', personnelNumber: 'P002', name: 'Marcel Muster', address: 'Baden', phone: '+41 79 000 00 02', email: 'marcel@rohner-demo.ch', function: 'Chauffeur', employmentStart: '2022-08-01', employmentPercentage: 100, defaultVehicleId: 'v1', defaultTrailerId: 't1', active: true },
-  { id: 'd3', personnelNumber: 'P003', name: 'André Beispiel', function: 'Chauffeur', employmentPercentage: 100, defaultVehicleId: 'v3', defaultTrailerId: 't2', active: true },
+  { id: 'd1', personnelNumber: 'P001', firstName: 'René', lastName: 'Rohner', name: 'René Rohner', city: 'Siglistorf', phone: '+41 79 000 00 01', email: 'rene@rohner-demo.ch', function: 'Chauffeur', employmentStart: '2020-03-01', employmentPercentage: 100, defaultVehicleId: 'v2', active: true },
+  { id: 'd2', personnelNumber: 'P002', firstName: 'Marcel', lastName: 'Muster', name: 'Marcel Muster', city: 'Baden', phone: '+41 79 000 00 02', email: 'marcel@rohner-demo.ch', function: 'Chauffeur', employmentStart: '2022-08-01', employmentPercentage: 100, defaultVehicleId: 'v1', defaultTrailerId: 't1', active: true },
+  { id: 'd3', personnelNumber: 'P003', firstName: 'André', lastName: 'Beispiel', name: 'André Beispiel', function: 'Chauffeur', employmentPercentage: 100, defaultVehicleId: 'v3', defaultTrailerId: 't2', active: true },
 ];
 
 export const vehicles: Vehicle[] = [
