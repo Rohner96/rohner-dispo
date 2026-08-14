@@ -22,7 +22,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.24.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+Dies ist Version **1.0.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+
+Neu in Version 1.0.0:
+
+- separates Hamburger-Menü für Administratoren und Mitarbeitende
+- neue Startseite mit persönlicher Begrüssung und Flottenfoto der Rohner AG
+- neuer Menüpunkt Einstellungen für beide Rollen
+- heller und dunkler Darstellungsmodus mit lokaler Speicherung
+- Mitarbeitermodus auf Deutsch, Englisch, Albanisch und Rumänisch umschaltbar
+- Übersetzungen für Mitarbeitermenü, Auftragsablauf, Zeitmessung und Reparaturmeldungen
+- bestehende Rollen und Berechtigungen bleiben unverändert
 
 Neu in Version 0.24.0:
 

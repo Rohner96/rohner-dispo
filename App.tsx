@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import {
   Pressable,
@@ -52,8 +53,10 @@ import { CalendarMode, calendarPeriodLabel, calendarWeekLabel, dayLabel, isWeeke
 import { shiftOrderByDays, shiftOrderByHours } from './src/lib/orderScheduling';
 import { deleteCloudRecord, loadCloudData, restoreCloudIdentity, saveCloudCollection, saveCloudUsers, signInCloud, signOutCloud, subscribeToCloudChanges, CloudAppData, CloudIdentity, RecordKind } from './src/lib/cloudData';
 import { isCloudConfigured } from './src/lib/supabase';
+import { AppLanguage, isAppLanguage, languageLocales, languageOptions, translate, translatedRepairCategory, translatedRepairPriority, translatedRepairStatus, translatedWorkflowAction, translatedWorkflowLabel } from './src/lib/i18n';
 
-type Screen = 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences';
+type Screen = 'home' | 'calendar' | 'newOrder' | 'driver' | 'repairs' | 'billing' | 'masterData' | 'absences' | 'settings';
+type ThemeMode = 'light' | 'dark';
 
 const typeLabels: Record<OrderType, string> = {
   kipper: 'Kipper',
@@ -264,7 +267,7 @@ function SearchableDriverSelect({ drivers, selected, onSelect }: { drivers: Driv
   );
 }
 
-function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false }: { order: TransportOrder; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean }) {
+function OrderCard({ order, projectsData, driversData, vehiclesData, trailersData, compact = false, language = 'de' }: { order: TransportOrder; projectsData: Project[]; driversData: Driver[]; vehiclesData: Vehicle[]; trailersData: Trailer[]; compact?: boolean; language?: AppLanguage }) {
   const project = lookup(projectsData, order.projectId);
   const driver = lookup(driversData, order.driverId);
   const vehicle = lookup(vehiclesData, order.vehicleId);
@@ -274,7 +277,7 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
     <View style={[styles.card, { borderLeftColor: order.type ? typeColors[order.type] : '#0B4D27' }]}>
       <View style={styles.cardTopline}>
         <Text style={styles.orderNumber}>{order.orderNumber}{order.type ? ` · ${typeLabels[order.type]}` : ''}</Text>
-        <Text style={styles.status}>{workflowLabels[order.workflowStep]}</Text>
+        <Text style={styles.status}>{language === 'de' ? workflowLabels[order.workflowStep] : translatedWorkflowLabel(language, order.workflowStep)}</Text>
       </View>
       <Text style={styles.cardTitle}>{order.title}</Text>
       <Text style={styles.muted}>{project?.customerName} · {project?.name}</Text>
@@ -283,12 +286,12 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
         <View style={styles.locationLinks}>
           {order.pickupMapUrl ? (
             <Pressable style={styles.locationLinkButton} onPress={() => openMapUrl(order.pickupMapUrl!)}>
-              <Text style={styles.locationLinkText}>📍 Ladeort in Google Maps</Text>
+              <Text style={styles.locationLinkText}>📍 {translate(language, 'pickupMaps')}</Text>
             </Pressable>
           ) : null}
           {order.deliveryMapUrl ? (
             <Pressable style={styles.locationLinkButton} onPress={() => openMapUrl(order.deliveryMapUrl!)}>
-              <Text style={styles.locationLinkText}>📍 Abladeort in Google Maps</Text>
+              <Text style={styles.locationLinkText}>📍 {translate(language, 'deliveryMaps')}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -296,8 +299,8 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
       {!compact && <Text style={styles.description}>{order.description}</Text>}
       <View style={styles.tags}>
         <Text style={styles.tag}>{order.timeWindow}</Text>
-        <Text style={styles.tag}>{driver?.name ?? 'Chauffeur offen'}</Text>
-        <Text style={styles.tag}>{vehicle?.internalNumber ?? 'LKW offen'}</Text>
+        <Text style={styles.tag}>{driver?.name ?? translate(language, 'driverOpen')}</Text>
+        <Text style={styles.tag}>{vehicle?.internalNumber ?? translate(language, 'truckOpen')}</Text>
         {trailer && <Text style={styles.tag}>{trailer.internalNumber}</Text>}
       </View>
     </View>
@@ -736,6 +739,7 @@ function DriverView({
   driversData,
   vehiclesData,
   trailersData,
+  language,
   onAdvance,
   onBack,
 }: {
@@ -745,6 +749,7 @@ function DriverView({
   driversData: Driver[];
   vehiclesData: Vehicle[];
   trailersData: Trailer[];
+  language: AppLanguage;
   onAdvance: (id: string) => void;
   onBack: (id: string) => void;
 }) {
@@ -761,11 +766,11 @@ function DriverView({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.eyebrow}>{user.displayName.toUpperCase()} · AKTUELLE AUFTRÄGE</Text>
-      <Text style={styles.heading}>Meine Touren</Text>
+      <Text style={styles.eyebrow}>{user.displayName.toUpperCase()} · {translate(language, 'currentOrders')}</Text>
+      <Text style={styles.heading}>{translate(language, 'myTours')}</Text>
       {assigned.map((order) => (
         <View key={order.id}>
-          <OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} />
+          <OrderCard order={order} projectsData={projectsData} driversData={driversData} vehiclesData={vehiclesData} trailersData={trailersData} language={language} />
           {(() => {
             const mapTarget = mapTargetForStep(order.workflowStep);
             const durations = calculateWorkflowDurations(order.workflowEvents, order.workflowStep, now);
@@ -773,13 +778,13 @@ function DriverView({
               <>
                 {mapTarget ? (
                   <View style={styles.nextDestinationBox}>
-                    <Text style={styles.nextDestinationEyebrow}>NÄCHSTES ZIEL</Text>
+                    <Text style={styles.nextDestinationEyebrow}>{translate(language, 'nextDestination')}</Text>
                     <Text style={styles.nextDestinationTitle}>
                       {mapTarget === 'pickup' ? order.pickup : order.delivery}
                     </Text>
                     <Pressable style={styles.mapButtonStrong} onPress={() => openMapUrl(orderMapUrl(order, mapTarget))}>
                       <Text style={styles.primaryButtonText}>
-                        {mapTarget === 'pickup' ? 'Google Maps zum Ladeort' : 'Google Maps zum Abladeort'}
+                        {translate(language, mapTarget === 'pickup' ? 'mapsPickup' : 'mapsDelivery')}
                       </Text>
                     </Pressable>
                   </View>
@@ -787,14 +792,14 @@ function DriverView({
 
                 {order.workflowStep !== 'zugeteilt' ? (
                   <View style={styles.timeSummary}>
-                    <Text style={styles.timeSummaryTitle}>Laufende Zeiterfassung</Text>
+                    <Text style={styles.timeSummaryTitle}>{translate(language, 'runningTime')}</Text>
                     <View style={styles.timeGrid}>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Fahrt Ladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_ladeort)}</Text></View>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Wartezeit Ladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_ladeort)}</Text></View>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Beladung</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.beladung)}</Text></View>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Fahrt Abladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_abladeort)}</Text></View>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Wartezeit Abladeort</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_abladeort)}</Text></View>
-                      <View style={styles.timeCell}><Text style={styles.timeLabel}>Entladung</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.entladung)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'drivePickup')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_ladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'waitPickup')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_ladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'loading')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.beladung)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'driveDelivery')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.fahrt_abladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'waitDelivery')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.wartezeit_abladeort)}</Text></View>
+                      <View style={styles.timeCell}><Text style={styles.timeLabel}>{translate(language, 'unloading')}</Text><Text style={styles.timeValue}>{formatLiveDuration(durations.entladung)}</Text></View>
                     </View>
                   </View>
                 ) : null}
@@ -807,46 +812,46 @@ function DriverView({
               style={[styles.actionButton, isWorkflowFinished(order.workflowStep) && styles.disabledButton]}
               onPress={() => onAdvance(order.id)}
             >
-              <Text style={styles.actionButtonText}>{nextWorkflowAction(order.workflowStep)}</Text>
+              <Text style={styles.actionButtonText}>{translatedWorkflowAction(language, order.workflowStep)}</Text>
             </Pressable>
             {order.workflowStep !== 'zugeteilt' && order.status !== 'verrechenbar' ? (
               <Pressable style={styles.backButton} onPress={() => setBackConfirmationId(order.id)}>
-                <Text style={styles.backButtonText}>↶ Einen Schritt zurück</Text>
+                <Text style={styles.backButtonText}>↶ {translate(language, 'stepBack')}</Text>
               </Pressable>
             ) : null}
           </View>
           {backConfirmationId === order.id ? (
             <View style={styles.backConfirmation}>
-              <Text style={styles.backConfirmationTitle}>Letzten Schritt wirklich korrigieren?</Text>
-              <Text style={styles.description}>Die Zeit läuft danach wieder in der vorherigen Phase weiter.</Text>
+              <Text style={styles.backConfirmationTitle}>{translate(language, 'confirmBack')}</Text>
+              <Text style={styles.description}>{translate(language, 'backHint')}</Text>
               <View style={styles.driverActions}>
                 <Pressable style={styles.secondaryButton} onPress={() => setBackConfirmationId(undefined)}>
-                  <Text style={styles.secondaryButtonText}>Abbrechen</Text>
+                  <Text style={styles.secondaryButtonText}>{translate(language, 'cancel')}</Text>
                 </Pressable>
                 <Pressable style={styles.backConfirmButton} onPress={() => { onBack(order.id); setBackConfirmationId(undefined); }}>
-                  <Text style={styles.primaryButtonText}>Ja, Schritt zurück</Text>
+                  <Text style={styles.primaryButtonText}>{translate(language, 'yesBack')}</Text>
                 </Pressable>
               </View>
             </View>
           ) : null}
           {isWorkflowFinished(order.workflowStep) ? (
             <Pressable style={styles.pdfButton} onPress={() => saveOrderDeliveryNote(order, projectsData, driversData, vehiclesData, trailersData)}>
-              <Text style={styles.pdfButtonText}>Lieferschein als PDF herunterladen</Text>
+              <Text style={styles.pdfButtonText}>{translate(language, 'downloadPdf')}</Text>
             </Pressable>
           ) : null}
           {order.workflowEvents.length > 0 && (
             <View style={styles.timeline}>
               {order.workflowEvents.map((event, index) => (
                 <View key={`${event.step}-${index}`} style={styles.timelineRow}>
-                  <Text style={styles.timelineLabel}>{workflowLabels[event.step]}</Text>
-                  <Text style={styles.timelineTime}>{new Date(event.at).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <Text style={styles.timelineLabel}>{translatedWorkflowLabel(language, event.step)}</Text>
+                  <Text style={styles.timelineTime}>{new Date(event.at).toLocaleTimeString(languageLocales[language], { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
               ))}
             </View>
           )}
         </View>
       ))}
-      {assigned.length === 0 && <Text style={styles.empty}>Keine Aufträge zugeteilt.</Text>}
+      {assigned.length === 0 && <Text style={styles.empty}>{translate(language, 'noOrders')}</Text>}
     </View>
   );
 }
@@ -863,14 +868,14 @@ const repairPriorityLabels: Record<RepairPriority, string> = {
   fahrzeug_stilllegen: 'Fahrzeug nicht weiterfahren',
 };
 
-function RepairCard({ repair, vehiclesData, showReporter = false }: { repair: RepairCase; vehiclesData: Vehicle[]; showReporter?: boolean }) {
+function RepairCard({ repair, vehiclesData, showReporter = false, language = 'de' }: { repair: RepairCase; vehiclesData: Vehicle[]; showReporter?: boolean; language?: AppLanguage }) {
   const vehicle = lookup(vehiclesData, repair.vehicleId);
   return (
     <View style={styles.repairCard}>
       <View style={styles.cardTopline}>
-        <Text style={styles.orderNumber}>{repair.caseNumber} · {repairCategoryLabels[repair.category]}</Text>
+        <Text style={styles.orderNumber}>{repair.caseNumber} · {language === 'de' ? repairCategoryLabels[repair.category] : translatedRepairCategory(language, repair.category)}</Text>
         <Text style={[styles.repairStatus, repair.priority === 'fahrzeug_stilllegen' && styles.repairStatusCritical]}>
-          {repairStatusLabels[repair.status]}
+          {language === 'de' ? repairStatusLabels[repair.status] : translatedRepairStatus(language, repair.status)}
         </Text>
       </View>
       <Text style={styles.cardTitle}>{repair.title}</Text>
@@ -878,15 +883,15 @@ function RepairCard({ repair, vehiclesData, showReporter = false }: { repair: Re
       <Text style={styles.description}>{repair.description}</Text>
       {repair.photoUri ? <Image source={{ uri: repair.photoUri }} style={styles.repairPhoto} resizeMode="cover" /> : null}
       <View style={styles.tags}>
-        <Text style={styles.tag}>{repairPriorityLabels[repair.priority]}</Text>
+        <Text style={styles.tag}>{language === 'de' ? repairPriorityLabels[repair.priority] : translatedRepairPriority(language, repair.priority)}</Text>
         {showReporter && <Text style={styles.tag}>Gemeldet von {repair.reportedByName}</Text>}
-        <Text style={styles.tag}>{new Date(repair.reportedAt).toLocaleString('de-CH')}</Text>
+        <Text style={styles.tag}>{new Date(repair.reportedAt).toLocaleString(languageLocales[language])}</Text>
       </View>
       {repair.workshopDate ? (
         <View style={styles.appointmentBox}>
-          <Text style={styles.appointmentTitle}>Werkstatttermin</Text>
-          <Text style={styles.description}>{repair.workshopDate} · {repair.workshopTime || 'Zeit offen'}</Text>
-          <Text style={styles.muted}>{repair.workshopName || 'Werkstatt noch offen'}</Text>
+          <Text style={styles.appointmentTitle}>{translate(language, 'workshopAppointment')}</Text>
+          <Text style={styles.description}>{repair.workshopDate} · {repair.workshopTime || translate(language, 'timeOpen')}</Text>
+          <Text style={styles.muted}>{repair.workshopName || translate(language, 'workshopOpen')}</Text>
         </View>
       ) : null}
     </View>
@@ -897,11 +902,13 @@ function EmployeeRepairsView({
   repairs,
   user,
   vehiclesData,
+  language,
   onReport,
 }: {
   repairs: RepairCase[];
   user: AppUser;
   vehiclesData: Vehicle[];
+  language: AppLanguage;
   onReport: (repair: RepairCase) => void;
 }) {
   const activeVehicles = activeOnly(vehiclesData);
@@ -919,7 +926,7 @@ function EmployeeRepairsView({
     if (Platform.OS !== 'web') {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        setFormError('Bitte erlaube den Kamerazugriff, damit du ein Foto aufnehmen kannst.');
+        setFormError(translate(language, 'cameraPermission'));
         return;
       }
     }
@@ -931,7 +938,7 @@ function EmployeeRepairsView({
 
   function saveRepair() {
     if (!title.trim() || !description.trim() || !photoUri) {
-      setFormError('Bitte Kurzbezeichnung, Beschreibung und ein Foto erfassen.');
+      setFormError(translate(language, 'repairRequired'));
       return;
     }
     const now = new Date().toISOString();
@@ -960,54 +967,55 @@ function EmployeeRepairsView({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.eyebrow}>FAHRZEUG & WERKSTATT</Text>
-      <Text style={styles.heading}>Schaden oder Defekt melden</Text>
+      <Text style={styles.eyebrow}>{translate(language, 'vehicleWorkshop')}</Text>
+      <Text style={styles.heading}>{translate(language, 'repairTitle')}</Text>
 
-      <Text style={styles.fieldLabel}>Betroffener LKW</Text>
+      <Text style={styles.fieldLabel}>{translate(language, 'affectedTruck')}</Text>
       <ChoiceRow
         options={activeVehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.internalNumber }))}
         selected={vehicleId}
         onSelect={setVehicleId}
       />
 
-      <Text style={styles.fieldLabel}>Art der Meldung</Text>
+      <Text style={styles.fieldLabel}>{translate(language, 'reportType')}</Text>
       <ChoiceRow
-        options={(Object.keys(repairCategoryLabels) as RepairCategory[]).map((value) => ({ value, label: repairCategoryLabels[value] }))}
+        options={(Object.keys(repairCategoryLabels) as RepairCategory[]).map((value) => ({ value, label: translatedRepairCategory(language, value) }))}
         selected={category}
         onSelect={setCategory}
       />
 
-      <Text style={styles.fieldLabel}>Dringlichkeit</Text>
+      <Text style={styles.fieldLabel}>{translate(language, 'urgency')}</Text>
       <ChoiceRow
-        options={(Object.keys(repairPriorityLabels) as RepairPriority[]).map((value) => ({ value, label: repairPriorityLabels[value] }))}
+        options={(Object.keys(repairPriorityLabels) as RepairPriority[]).map((value) => ({ value, label: translatedRepairPriority(language, value) }))}
         selected={priority}
         onSelect={setPriority}
       />
 
-      <Text style={styles.fieldLabel}>Kurzbezeichnung</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="z. B. Scheibenwischer defekt" />
-      <Text style={styles.fieldLabel}>Was ist passiert oder defekt?</Text>
+      <Text style={styles.fieldLabel}>{translate(language, 'shortTitle')}</Text>
+      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder={translate(language, 'titlePlaceholder')} placeholderTextColor={styles.inputPlaceholder.color} />
+      <Text style={styles.fieldLabel}>{translate(language, 'whatHappened')}</Text>
       <TextInput
         multiline
         numberOfLines={4}
         style={[styles.input, styles.textArea]}
         value={description}
         onChangeText={setDescription}
-        placeholder="Schaden möglichst genau beschreiben"
+        placeholder={translate(language, 'descriptionPlaceholder')}
+        placeholderTextColor={styles.inputPlaceholder.color}
       />
 
       <Pressable style={styles.cameraButton} onPress={takePhoto}>
-        <Text style={styles.cameraButtonText}>{photoUri ? 'Foto ersetzen' : '📷 Foto aufnehmen'}</Text>
+        <Text style={styles.cameraButtonText}>{translate(language, photoUri ? 'replacePhoto' : 'takePhoto')}</Text>
       </Pressable>
       {photoUri ? <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" /> : null}
       {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
       <Pressable style={styles.primaryButtonLarge} onPress={saveRepair}>
-        <Text style={styles.primaryButtonText}>Reparaturfall melden</Text>
+        <Text style={styles.primaryButtonText}>{translate(language, 'submitRepair')}</Text>
       </Pressable>
 
-      <Text style={styles.listHeading}>Meine offenen Meldungen</Text>
-      {ownActiveRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} vehiclesData={vehiclesData} />)}
-      {ownActiveRepairs.length === 0 && <Text style={styles.empty}>Du hast keine offenen Reparaturfälle.</Text>}
+      <Text style={styles.listHeading}>{translate(language, 'myOpenReports')}</Text>
+      {ownActiveRepairs.map((repair) => <RepairCard key={repair.id} repair={repair} vehiclesData={vehiclesData} language={language} />)}
+      {ownActiveRepairs.length === 0 && <Text style={styles.empty}>{translate(language, 'noOpenRepairs')}</Text>}
     </View>
   );
 }
@@ -1227,11 +1235,49 @@ function OfficeView({
   );
 }
 
+function HomeView({ user, language }: { user: AppUser; language: AppLanguage }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>{translate(language, 'homeEyebrow')}</Text>
+      <Text style={styles.heading}>{translate(language, 'homeTitle')}, {user.displayName}</Text>
+      <Text style={styles.homeIntro}>{translate(language, 'homePlaceholder')}</Text>
+      <Image source={require('./assets/rohner-fleet.jpeg')} style={styles.homeImage} resizeMode="cover" accessibilityLabel="Fahrzeugflotte der Rohner AG" />
+    </View>
+  );
+}
+
+function SettingsView({ isAdmin, language, themeMode, onLanguageChange, onThemeChange }: { isAdmin: boolean; language: AppLanguage; themeMode: ThemeMode; onLanguageChange: (language: AppLanguage) => void; onThemeChange: (theme: ThemeMode) => void }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.eyebrow}>{translate(language, 'settingsEyebrow')}</Text>
+      <Text style={styles.heading}>{translate(language, 'settingsTitle')}</Text>
+      <View style={styles.settingsCard}>
+        <Text style={styles.settingsGroupTitle}>{translate(language, 'appearance')}</Text>
+        <ChoiceRow<ThemeMode>
+          options={[{ value: 'light', label: translate(language, 'light') }, { value: 'dark', label: translate(language, 'dark') }]}
+          selected={themeMode}
+          onSelect={onThemeChange}
+        />
+        {!isAdmin ? (
+          <>
+            <Text style={styles.settingsGroupTitle}>{translate(language, 'language')}</Text>
+            <ChoiceRow<AppLanguage> options={languageOptions} selected={language} onSelect={onLanguageChange} />
+            <Text style={styles.settingsHint}>{translate(language, 'languageHint')}</Text>
+          </>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser>();
   const [cloudIdentity, setCloudIdentity] = useState<CloudIdentity>();
   const [initializing, setInitializing] = useState(isCloudConfigured);
-  const [screen, setScreen] = useState<Screen>('calendar');
+  const [screen, setScreen] = useState<Screen>('home');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [language, setLanguage] = useState<AppLanguage>('de');
   const [orders, setOrders] = useState(initialOrders);
   const [absenceData, setAbsenceData] = useState(initialAbsences);
   const [repairs, setRepairs] = useState(initialRepairCases);
@@ -1244,6 +1290,17 @@ export default function App() {
   const [message, setMessage] = useState('');
   const { width } = useWindowDimensions();
   const maxWidth = width > 1100 ? 1040 : width;
+  styles = stylesForTheme(themeMode);
+
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem('rohner-theme-mode'),
+      AsyncStorage.getItem('rohner-employee-language'),
+    ]).then(([storedTheme, storedLanguage]) => {
+      if (storedTheme === 'light' || storedTheme === 'dark') setThemeMode(storedTheme);
+      if (isAppLanguage(storedLanguage)) setLanguage(storedLanguage);
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!isCloudConfigured) return;
@@ -1293,7 +1350,8 @@ export default function App() {
 
   function login(user: AppUser) {
     setCurrentUser(user);
-    setScreen(user.role === 'admin' ? 'calendar' : 'driver');
+    setScreen('home');
+    setMenuOpen(false);
     setMessage(`Willkommen, ${user.displayName}.`);
   }
 
@@ -1303,8 +1361,19 @@ export default function App() {
     }
     setCloudIdentity(undefined);
     setCurrentUser(undefined);
-    setScreen('calendar');
+    setScreen('home');
+    setMenuOpen(false);
     setMessage('');
+  }
+
+  function changeTheme(value: ThemeMode) {
+    setThemeMode(value);
+    void AsyncStorage.setItem('rohner-theme-mode', value);
+  }
+
+  function changeLanguage(value: AppLanguage) {
+    setLanguage(value);
+    void AsyncStorage.setItem('rohner-employee-language', value);
   }
 
   function persistCollection<T extends { id: string }>(kind: RecordKind, items: T[]) {
@@ -1417,6 +1486,31 @@ export default function App() {
   }
 
   const isAdmin = currentUser.role === 'admin';
+  const uiLanguage: AppLanguage = isAdmin ? 'de' : language;
+  const openRepairCount = repairs.filter((repair) => repair.status !== 'erledigt').length;
+  const ownRepairCount = activeRepairsForEmployee(repairs, currentUser.id).length;
+  const menuItems: { screen: Screen; label: string }[] = isAdmin
+    ? [
+      { screen: 'home', label: 'Startseite' },
+      { screen: 'calendar', label: 'Kalender' },
+      { screen: 'newOrder', label: 'Auftrag erfassen' },
+      { screen: 'absences', label: 'Abwesenheiten' },
+      { screen: 'repairs', label: `Reparaturen (${openRepairCount})` },
+      { screen: 'billing', label: 'Verrechnung' },
+      { screen: 'masterData', label: 'Stammdaten' },
+      { screen: 'settings', label: 'Einstellungen' },
+    ]
+    : [
+      { screen: 'home', label: translate(uiLanguage, 'home') },
+      { screen: 'driver', label: translate(uiLanguage, 'orders') },
+      { screen: 'repairs', label: `${translate(uiLanguage, 'reportRepair')} (${ownRepairCount})` },
+      { screen: 'settings', label: translate(uiLanguage, 'settings') },
+    ];
+
+  function navigate(target: Screen) {
+    setScreen(target);
+    setMenuOpen(false);
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -1425,9 +1519,16 @@ export default function App() {
         <View style={[styles.container, { maxWidth }]}>
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <View>
-                <Text style={styles.accountName}>{currentUser.displayName}</Text>
-                <Text style={styles.accountRole}>{isAdmin ? 'Administrator' : 'Mitarbeiter'}</Text>
+              <View style={styles.accountMenuRow}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Menü öffnen" onPress={() => setMenuOpen((value) => !value)} style={[styles.menuButton, menuOpen && styles.menuButtonOpen]}>
+                  <View style={styles.menuLine} />
+                  <View style={styles.menuLine} />
+                  <View style={styles.menuLine} />
+                </Pressable>
+                <View>
+                  <Text style={styles.accountName}>{currentUser.displayName}</Text>
+                  <Text style={styles.accountRole}>{isAdmin ? 'Administrator' : translate(uiLanguage, 'employee')}</Text>
+                </View>
               </View>
               <View style={styles.headerBrand}>
                 <View style={styles.headerLogoSurface}>
@@ -1441,44 +1542,21 @@ export default function App() {
                 <Text style={styles.brandSub}>Kommunikationsapp</Text>
               </View>
             </View>
-            <Pressable onPress={logout} style={styles.logoutButton}>
-              <Text style={styles.logoutText}>Abmelden</Text>
-            </Pressable>
           </View>
 
-          {isAdmin && (
-            <View style={styles.subNavigation}>
-              <Pressable onPress={() => setScreen('calendar')} style={[styles.navButton, screen === 'calendar' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'calendar' && styles.navTextActive]}>Kalender</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('newOrder')} style={[styles.navButton, screen === 'newOrder' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'newOrder' && styles.navTextActive]}>Auftrag erfassen</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('absences')} style={[styles.navButton, screen === 'absences' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'absences' && styles.navTextActive]}>Abwesenheiten</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Reparaturen ({repairs.filter((repair) => repair.status !== 'erledigt').length})</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('billing')} style={[styles.navButton, screen === 'billing' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'billing' && styles.navTextActive]}>Verrechnung</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
+          {menuOpen ? (
+            <View style={styles.menuPanel}>
+              <Text style={styles.menuTitle}>{isAdmin ? 'Administratormenü' : translate(uiLanguage, 'employee')}</Text>
+              {menuItems.map((item) => (
+                <Pressable key={item.screen} onPress={() => navigate(item.screen)} style={[styles.menuItem, screen === item.screen && styles.menuItemActive]}>
+                  <Text style={[styles.menuItemText, screen === item.screen && styles.menuItemTextActive]}>{item.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable onPress={logout} style={styles.menuLogout}>
+                <Text style={styles.menuLogoutText}>{translate(uiLanguage, 'logout')}</Text>
               </Pressable>
             </View>
-          )}
-
-          {!isAdmin && (
-            <View style={styles.subNavigation}>
-              <Pressable onPress={() => setScreen('driver')} style={[styles.navButton, screen === 'driver' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'driver' && styles.navTextActive]}>Meine Aufträge</Text>
-              </Pressable>
-              <Pressable onPress={() => setScreen('repairs')} style={[styles.navButton, screen === 'repairs' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'repairs' && styles.navTextActive]}>Schaden melden ({activeRepairsForEmployee(repairs, currentUser.id).length})</Text>
-              </Pressable>
-            </View>
-          )}
+          ) : null}
 
           {message ? (
             <Pressable style={styles.message} onPress={() => setMessage('')}>
@@ -1486,6 +1564,7 @@ export default function App() {
             </Pressable>
           ) : null}
 
+          {screen === 'home' && <HomeView user={currentUser} language={uiLanguage} />}
           {isAdmin && screen === 'calendar' && (
             <DispositionView orders={orders} absencesData={absenceData} repairs={repairs} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onNewOrder={() => setScreen('newOrder')} onUpdateOrder={updateScheduledOrder} onOpenAbsences={() => setScreen('absences')} onOpenRepairs={() => setScreen('repairs')} />
           )}
@@ -1493,10 +1572,10 @@ export default function App() {
             <OrderForm customersData={customerData} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onSave={saveOrder} onCancel={() => setScreen('calendar')} />
           )}
           {!isAdmin && screen === 'driver' && (
-            <DriverView orders={orders} user={currentUser} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onAdvance={advanceOrder} onBack={backOrder} />
+            <DriverView orders={orders} user={currentUser} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} language={uiLanguage} onAdvance={advanceOrder} onBack={backOrder} />
           )}
           {!isAdmin && screen === 'repairs' && (
-            <EmployeeRepairsView repairs={repairs} user={currentUser} vehiclesData={vehicleData} onReport={reportRepair} />
+            <EmployeeRepairsView repairs={repairs} user={currentUser} vehiclesData={vehicleData} language={uiLanguage} onReport={reportRepair} />
           )}
           {isAdmin && screen === 'repairs' && (
             <AdminRepairsView repairs={repairs} vehiclesData={vehicleData} onUpdate={updateRepair} />
@@ -1505,19 +1584,24 @@ export default function App() {
             <OfficeView orders={orders} projectsData={projectData} driversData={driverData} vehiclesData={vehicleData} trailersData={trailerData} onRelease={releaseForBilling} />
           )}
           {isAdmin && screen === 'absences' && <AbsencesView absencesData={absenceData} driversData={driverData} onSave={saveAbsence} onDelete={deleteAbsence} />}
-          {isAdmin && screen === 'masterData' && <MasterDataView customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={(items) => { setCustomerData(items); persistCollection('customers', items); }} onProjectsChange={(items) => { setProjectData(items); persistCollection('projects', items); }} onDriversChange={(items) => { setDriverData(items); persistCollection('drivers', items); }} onVehiclesChange={(items) => { setVehicleData(items); persistCollection('vehicles', items); }} onTrailersChange={(items) => { setTrailerData(items); persistCollection('trailers', items); }} onUsersChange={(items) => { setUserData(items); persistUsers(items); }} />}
+          {isAdmin && screen === 'masterData' && <MasterDataView themeMode={themeMode} customers={customerData} projects={projectData} drivers={driverData} vehicles={vehicleData} trailers={trailerData} users={userData} onCustomersChange={(items) => { setCustomerData(items); persistCollection('customers', items); }} onProjectsChange={(items) => { setProjectData(items); persistCollection('projects', items); }} onDriversChange={(items) => { setDriverData(items); persistCollection('drivers', items); }} onVehiclesChange={(items) => { setVehicleData(items); persistCollection('vehicles', items); }} onTrailersChange={(items) => { setTrailerData(items); persistCollection('trailers', items); }} onUsersChange={(items) => { setUserData(items); persistUsers(items); }} />}
+          {screen === 'settings' && <SettingsView isAdmin={isAdmin} language={uiLanguage} themeMode={themeMode} onLanguageChange={changeLanguage} onThemeChange={changeTheme} />}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const lightStyles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#07130B' },
   page: { flexGrow: 1, alignItems: 'center', backgroundColor: '#F4F7F4' },
   container: { width: '100%' },
   header: { backgroundColor: '#0B4D27', paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18, gap: 12 },
   headerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  accountMenuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+  menuButton: { width: 44, height: 42, borderWidth: 1, borderColor: '#8FBA9B', borderRadius: 9, alignItems: 'center', justifyContent: 'center', gap: 5 },
+  menuButtonOpen: { backgroundColor: '#176437' },
+  menuLine: { width: 21, height: 2, borderRadius: 2, backgroundColor: '#FFFFFF' },
   brandSub: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', textAlign: 'right', marginTop: 4 },
   headerBrand: { width: 230, maxWidth: '58%', alignItems: 'flex-end' },
   headerLogoSurface: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
@@ -1526,6 +1610,14 @@ const styles = StyleSheet.create({
   accountRole: { color: '#BBD7C3', marginTop: 2, fontSize: 12 },
   logoutButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#8FBA9B', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
   logoutText: { color: '#FFFFFF', fontWeight: '700' },
+  menuPanel: { marginHorizontal: 18, marginTop: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE4DE', borderRadius: 14, padding: 10, shadowColor: '#000000', shadowOpacity: 0.12, shadowRadius: 14, elevation: 5 },
+  menuTitle: { color: '#66736A', fontSize: 11, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 9, textTransform: 'uppercase' },
+  menuItem: { borderRadius: 9, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 3 },
+  menuItemActive: { backgroundColor: '#0B4D27' },
+  menuItemText: { color: '#27362C', fontWeight: '800' },
+  menuItemTextActive: { color: '#FFFFFF' },
+  menuLogout: { borderTopWidth: 1, borderTopColor: '#E2E8E2', marginTop: 6, paddingHorizontal: 12, paddingVertical: 13 },
+  menuLogoutText: { color: '#A13E30', fontWeight: '800' },
   subNavigation: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 18, paddingTop: 16 },
   navButton: { borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#E7ECE8' },
   navButtonActive: { backgroundColor: '#0B4D27' },
@@ -1533,11 +1625,16 @@ const styles = StyleSheet.create({
   navTextActive: { color: '#FFFFFF' },
   message: { marginHorizontal: 18, marginTop: 14, borderRadius: 10, padding: 12, backgroundColor: '#E4F2E8' },
   messageText: { color: '#0B4D27', fontWeight: '700' },
-  section: { paddingHorizontal: 18, paddingBottom: 40 },
+  section: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 40 },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 },
   headingBlock: { flexShrink: 1 },
   eyebrow: { color: '#5C6B60', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   heading: { color: '#142018', fontSize: 26, fontWeight: '900', marginTop: 4, marginBottom: 18 },
+  homeIntro: { color: '#445049', fontSize: 17, lineHeight: 25, marginTop: -8, marginBottom: 18 },
+  homeImage: { width: '100%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: '#E7ECE8' },
+  settingsCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E6E1', borderRadius: 14, padding: 16 },
+  settingsGroupTitle: { color: '#142018', fontSize: 16, fontWeight: '900', marginTop: 4, marginBottom: 10 },
+  settingsHint: { color: '#66736A', fontSize: 12, lineHeight: 18, marginTop: 10 },
   primaryButton: { backgroundColor: '#0B4D27', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11, marginBottom: 18 },
   primaryButtonLarge: { flexGrow: 1, backgroundColor: '#0B4D27', borderRadius: 11, padding: 15, alignItems: 'center' },
   primaryButtonText: { color: '#FFFFFF', fontWeight: '800' },
@@ -1680,6 +1777,7 @@ const styles = StyleSheet.create({
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   formField: { minWidth: 220, flex: 1 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' },
+  inputPlaceholder: { color: '#7C887F' },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   formActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 24 },
   absenceForm: { backgroundColor: '#E7ECE8', borderRadius: 14, padding: 16, marginBottom: 18 },
@@ -1720,3 +1818,111 @@ const styles = StyleSheet.create({
   cloudTitle: { color: '#0B4D27', fontWeight: '900', marginBottom: 5 },
   cloudText: { color: '#42614B', fontSize: 12, lineHeight: 18 },
 });
+
+const darkOverrides = StyleSheet.create({
+  safe: { backgroundColor: '#070B08' },
+  page: { backgroundColor: '#101612' },
+  container: { backgroundColor: '#101612' },
+  menuPanel: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  menuTitle: { color: '#AAB6AD' },
+  menuItemText: { color: '#E8EEE9' },
+  menuLogout: { borderTopColor: '#34443A' },
+  message: { backgroundColor: '#183823' },
+  messageText: { color: '#BFE8CA' },
+  eyebrow: { color: '#AAB6AD' },
+  heading: { color: '#F2F6F3' },
+  homeIntro: { color: '#C9D2CB' },
+  homeImage: { backgroundColor: '#28352C' },
+  settingsCard: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  settingsGroupTitle: { color: '#F2F6F3' },
+  settingsHint: { color: '#AAB6AD' },
+  calendarFilters: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  calendarFiltersTitle: { color: '#E8EEE9' },
+  calendarFilterText: { color: '#E8EEE9' },
+  calendarNavigator: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  calendarArrow: { backgroundColor: '#28352C' },
+  calendarArrowText: { color: '#BFE8CA' },
+  calendarPeriod: { color: '#F2F6F3' },
+  calendarColumn: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  weekendCalendarColumn: { backgroundColor: '#202922', borderColor: '#445248' },
+  weekDay: { color: '#BFE8CA' },
+  calendarOrder: { backgroundColor: '#222D25' },
+  calendarTime: { color: '#B7C2BA' },
+  calendarTitle: { color: '#F2F6F3' },
+  calendarMeta: { color: '#AAB6AD' },
+  calendarEmpty: { color: '#849087' },
+  calendarDetail: { backgroundColor: '#18211B', borderColor: '#3F7650' },
+  calendarDetailTitle: { color: '#BFE8CA' },
+  closeDetailButton: { backgroundColor: '#28352C' },
+  closeDetailText: { color: '#E8EEE9' },
+  card: { backgroundColor: '#18211B' },
+  orderNumber: { color: '#AAB6AD' },
+  cardTitle: { color: '#F2F6F3' },
+  muted: { color: '#AAB6AD' },
+  route: { color: '#E8EEE9' },
+  description: { color: '#C9D2CB' },
+  tag: { color: '#DCE5DE', backgroundColor: '#28352C' },
+  nextDestinationBox: { backgroundColor: '#183823', borderColor: '#3F7650' },
+  nextDestinationTitle: { color: '#F2F6F3' },
+  timeSummary: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  timeSummaryTitle: { color: '#F2F6F3' },
+  timeCell: { backgroundColor: '#222D25' },
+  timeLabel: { color: '#AAB6AD' },
+  timeValue: { color: '#BFE8CA' },
+  secondaryButton: { borderColor: '#526057', backgroundColor: '#18211B' },
+  secondaryButtonText: { color: '#E8EEE9' },
+  pdfButton: { backgroundColor: '#18211B', borderColor: '#62A777' },
+  pdfButtonText: { color: '#BFE8CA' },
+  timeline: { backgroundColor: '#18211B' },
+  timelineRow: { borderBottomColor: '#34443A' },
+  timelineLabel: { color: '#DCE5DE' },
+  timelineTime: { color: '#AAB6AD' },
+  billingRow: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  empty: { color: '#B7C2BA', backgroundColor: '#18211B' },
+  fieldLabel: { color: '#E8EEE9' },
+  choice: { borderColor: '#526057', backgroundColor: '#18211B' },
+  choiceText: { color: '#DCE5DE' },
+  dropdownButton: { backgroundColor: '#18211B', borderColor: '#526057' },
+  dropdownText: { color: '#F2F6F3' },
+  dropdownMenu: { backgroundColor: '#18211B', borderColor: '#526057' },
+  dropdownOption: { borderBottomColor: '#34443A' },
+  dropdownOptionText: { color: '#DCE5DE' },
+  datePickerButton: { backgroundColor: '#18211B', borderColor: '#526057' },
+  datePickerButtonText: { color: '#F2F6F3' },
+  datePickerPanel: { backgroundColor: '#18211B', borderColor: '#526057' },
+  datePickerMonth: { color: '#F2F6F3' },
+  datePickerDayText: { color: '#DCE5DE' },
+  searchSelectInput: { backgroundColor: '#18211B', borderColor: '#526057', color: '#F2F6F3' },
+  searchSelectButton: { backgroundColor: '#18211B', borderColor: '#526057' },
+  input: { backgroundColor: '#18211B', borderColor: '#526057', color: '#F2F6F3' },
+  inputPlaceholder: { color: '#849087' },
+  absenceForm: { backgroundColor: '#222D25' },
+  absenceRow: { backgroundColor: '#18211B', borderColor: '#34443A' },
+  listHeading: { color: '#BFE8CA' },
+  listRow: { backgroundColor: '#18211B', borderBottomColor: '#34443A' },
+  listTitle: { color: '#F2F6F3' },
+  infoBox: { color: '#E7DDAF', backgroundColor: '#3B351A' },
+  repairCard: { backgroundColor: '#18211B', borderColor: '#4A3B27' },
+  repairAdminPanel: { backgroundColor: '#222D25' },
+  appointmentBox: { backgroundColor: '#3A2C19' },
+  loginCard: { backgroundColor: '#18211B' },
+  loginTitle: { color: '#F2F6F3' },
+  loginSub: { color: '#AAB6AD' },
+  demoBox: { backgroundColor: '#222D25' },
+  demoTitle: { color: '#E8EEE9' },
+  demoText: { color: '#AAB6AD' },
+});
+
+function stylesForTheme(themeMode: ThemeMode): typeof lightStyles {
+  if (themeMode === 'light') return lightStyles;
+  const themed = { ...lightStyles } as typeof lightStyles;
+  for (const key of Object.keys(darkOverrides)) {
+    (themed as Record<string, unknown>)[key] = StyleSheet.flatten([
+      (lightStyles as Record<string, unknown>)[key],
+      (darkOverrides as Record<string, unknown>)[key],
+    ]);
+  }
+  return themed;
+}
+
+let styles = lightStyles;

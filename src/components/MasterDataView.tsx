@@ -32,12 +32,14 @@ const trailerTypes: { value: TrailerCategory; label: string }[] = [
 
 interface Props {
   customers: Customer[]; projects: Project[]; drivers: Driver[]; vehicles: Vehicle[]; trailers: Trailer[]; users: AppUser[];
+  themeMode?: 'light' | 'dark';
   onCustomersChange: (items: Customer[]) => void; onProjectsChange: (items: Project[]) => void;
   onDriversChange: (items: Driver[]) => void; onVehiclesChange: (items: Vehicle[]) => void;
   onTrailersChange: (items: Trailer[]) => void; onUsersChange: (items: AppUser[]) => void;
 }
 
 export function MasterDataView(props: Props) {
+  styles = masterStylesForTheme(props.themeMode ?? 'light');
   const [tab, setTab] = useState<Tab>('customers');
   const [detail, setDetail] = useState<Detail>();
   const [form, setForm] = useState<Record<string, string>>({});
@@ -206,11 +208,32 @@ function DetailRow({ title, subtitle, onDetails }: { title: string; subtitle?: s
 function DetailSection({ title, action, onAction, children }: { title: string; action: string; onAction: () => void; children: React.ReactNode }) { return <View style={styles.detailSection}><View style={styles.detailHeading}><Text style={styles.detailTitle}>{title}</Text><Pressable style={styles.addButton} onPress={onAction}><Text style={styles.addText}>{action}</Text></Pressable></View>{children}</View>; }
 function InlineForm({ children }: { children: React.ReactNode }) { return <View style={styles.inlineForm}>{children}</View>; }
 
-const styles = StyleSheet.create({
-  section: { paddingHorizontal: 18, paddingBottom: 40 }, eyebrow: { color: '#5C6B60', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }, heading: { color: '#142018', fontSize: 26, fontWeight: '900', marginTop: 4 }, sub: { color: '#6A756D', marginTop: 4 }, headingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }, addButton: { backgroundColor: '#0B4D27', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }, addText: { color: '#FFF', fontWeight: '800' },
+const lightStyles = StyleSheet.create({
+  section: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 40 }, eyebrow: { color: '#5C6B60', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }, heading: { color: '#142018', fontSize: 26, fontWeight: '900', marginTop: 4 }, sub: { color: '#6A756D', marginTop: 4 }, headingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }, addButton: { backgroundColor: '#0B4D27', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11 }, addText: { color: '#FFF', fontWeight: '800' },
   tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }, tab: { backgroundColor: '#E7ECE8', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9 }, tabActive: { backgroundColor: '#0B4D27' }, tabText: { color: '#425047', fontWeight: '700' }, tabTextActive: { color: '#FFF' },
   formCard: { backgroundColor: '#E7ECE8', borderRadius: 14, padding: 16, marginTop: 14, marginBottom: 16 }, label: { color: '#27362C', fontWeight: '800', marginTop: 12, marginBottom: 6 }, input: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 10, paddingHorizontal: 13, paddingVertical: 12, color: '#142018' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, option: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#C7D1C9', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8 }, optionActive: { backgroundColor: '#0B4D27', borderColor: '#0B4D27' }, optionText: { color: '#34443A', fontWeight: '700' }, optionTextActive: { color: '#FFF' },
   groupTitle: { color: '#142018', fontSize: 17, fontWeight: '900', marginTop: 22, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#C7D1C9' }, warning: { color: '#5E4B00', backgroundColor: '#FFF5C7', borderRadius: 10, padding: 13, marginTop: 14, lineHeight: 19 }, error: { color: '#B42318', fontWeight: '700', marginTop: 10 }, formActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 16 }, saveButton: { flexGrow: 1, backgroundColor: '#0B4D27', borderRadius: 10, padding: 13, alignItems: 'center', marginTop: 12 }, saveText: { color: '#FFF', fontWeight: '800' }, stateButton: { backgroundColor: '#FDE7E5', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, marginTop: 12 }, stateText: { color: '#8A2921', fontWeight: '800' }, activateButton: { backgroundColor: '#E4F2E8' }, activateText: { color: '#0B4D27' },
   dataRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8E2', padding: 14, marginBottom: 8 }, inactiveRow: { opacity: 0.62 }, rowMain: { flex: 1 }, rowTitle: { color: '#142018', fontWeight: '800' }, rowSub: { color: '#6A756D', marginTop: 3 }, status: { color: '#0B4D27', fontSize: 11, fontWeight: '800', marginTop: 5 }, inactiveStatus: { color: '#7B342E' }, detailsButton: { backgroundColor: '#DCECE1', borderRadius: 9, paddingHorizontal: 13, paddingVertical: 10 }, detailsText: { color: '#0B4D27', fontWeight: '900' }, backButton: { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: '#E7ECE8', borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9 }, backText: { color: '#0B4D27', fontWeight: '800' },
   detailSection: { marginTop: 18, backgroundColor: '#FFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8E2', padding: 16 }, detailHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }, detailTitle: { color: '#142018', fontSize: 19, fontWeight: '900' }, detailRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#E7ECE8', paddingVertical: 13 }, inlineForm: { backgroundColor: '#E7ECE8', borderRadius: 12, padding: 13, marginBottom: 12 },
 });
+
+const darkOverrides = StyleSheet.create({
+  eyebrow: { color: '#AAB6AD' }, heading: { color: '#F2F6F3' }, sub: { color: '#AAB6AD' },
+  tab: { backgroundColor: '#28352C' }, tabText: { color: '#DCE5DE' },
+  formCard: { backgroundColor: '#222D25' }, label: { color: '#E8EEE9' }, input: { backgroundColor: '#18211B', borderColor: '#526057', color: '#F2F6F3' },
+  option: { backgroundColor: '#18211B', borderColor: '#526057' }, optionText: { color: '#DCE5DE' }, groupTitle: { color: '#F2F6F3', borderTopColor: '#526057' },
+  warning: { color: '#E7DDAF', backgroundColor: '#3B351A' }, dataRow: { backgroundColor: '#18211B', borderColor: '#34443A' }, rowTitle: { color: '#F2F6F3' }, rowSub: { color: '#AAB6AD' },
+  detailsButton: { backgroundColor: '#284632' }, detailsText: { color: '#BFE8CA' }, backButton: { backgroundColor: '#28352C' }, backText: { color: '#BFE8CA' },
+  detailSection: { backgroundColor: '#18211B', borderColor: '#34443A' }, detailTitle: { color: '#F2F6F3' }, detailRow: { borderTopColor: '#34443A' }, inlineForm: { backgroundColor: '#222D25' },
+});
+
+function masterStylesForTheme(themeMode: 'light' | 'dark'): typeof lightStyles {
+  if (themeMode === 'light') return lightStyles;
+  const themed = { ...lightStyles } as typeof lightStyles;
+  for (const key of Object.keys(darkOverrides)) {
+    (themed as Record<string, unknown>)[key] = StyleSheet.flatten([(lightStyles as Record<string, unknown>)[key], (darkOverrides as Record<string, unknown>)[key]]);
+  }
+  return themed;
+}
+
+let styles = lightStyles;
