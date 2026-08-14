@@ -75,6 +75,14 @@ const billingLabels: Record<BillingMode, string> = {
   kombiniert: 'Kombiniert',
 };
 
+const selectableBillingModes: BillingMode[] = [
+  'pauschal',
+  'tonne',
+  'kubikmeter',
+  'fuhre',
+  'stunde',
+];
+
 const typeColors: Record<OrderType, string> = {
   kipper: '#D94841',
   silo: '#8B5CF6',
@@ -263,9 +271,9 @@ function OrderCard({ order, projectsData, driversData, vehiclesData, trailersDat
   const trailer = lookup(trailersData, order.trailerId);
 
   return (
-    <View style={[styles.card, { borderLeftColor: typeColors[order.type] }]}>
+    <View style={[styles.card, { borderLeftColor: order.type ? typeColors[order.type] : '#0B4D27' }]}>
       <View style={styles.cardTopline}>
-        <Text style={styles.orderNumber}>{order.orderNumber} · {typeLabels[order.type]}</Text>
+        <Text style={styles.orderNumber}>{order.orderNumber}{order.type ? ` · ${typeLabels[order.type]}` : ''}</Text>
         <Text style={styles.status}>{workflowLabels[order.workflowStep]}</Text>
       </View>
       <Text style={styles.cardTitle}>{order.title}</Text>
@@ -331,7 +339,7 @@ function CalendarDay({ date, orders, absencesData, repairs, projectsData, driver
       {dayOrders.map((order) => {
         const driver = lookup(driversData, order.driverId);
         const project = lookup(projectsData, order.projectId);
-        return <Pressable accessibilityRole="button" key={order.id} onPress={() => onSelect({ kind: 'order', id: order.id })} style={[styles.calendarOrder, styles.clickableCalendarEntry, { borderLeftColor: typeColors[order.type] }]}><Text style={styles.calendarTime}>{order.timeWindow}</Text><Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text><Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'} · {typeLabels[order.type]}</Text></Pressable>;
+        return <Pressable accessibilityRole="button" key={order.id} onPress={() => onSelect({ kind: 'order', id: order.id })} style={[styles.calendarOrder, styles.clickableCalendarEntry, { borderLeftColor: order.type ? typeColors[order.type] : '#0B4D27' }]}><Text style={styles.calendarTime}>{order.timeWindow}</Text><Text style={styles.calendarTitle}>{project?.customerName ?? order.title}</Text><Text style={styles.calendarMeta}>{driver?.name ?? 'Nicht zugeteilt'}{order.type ? ` · ${typeLabels[order.type]}` : ''}</Text></Pressable>;
       })}
       {dayAbsences.map((absence) => {
         const driver = lookup(driversData, absence.driverId);
@@ -547,7 +555,6 @@ function OrderForm({
   const [customerId, setCustomerId] = useState(activeCustomers[0]?.id ?? '');
   const matchingProjects = projectsForCustomer(projectsData, customerId);
   const [projectId, setProjectId] = useState(matchingProjects[0]?.id ?? '');
-  const [type, setType] = useState<OrderType>('kipper');
   const [billingMode, setBillingMode] = useState<BillingMode>('stunde');
   const [date, setDate] = useState('2026-08-13');
   const [timeWindow, setTimeWindow] = useState('07:00–17:00');
@@ -568,7 +575,6 @@ function OrderForm({
     onSave({
       id: `order-${Date.now()}`,
       orderNumber: number,
-      type,
       status: 'zugeteilt',
       workflowStep: 'zugeteilt',
       workflowEvents: [],
@@ -612,11 +618,39 @@ function OrderForm({
         placeholder="Projekt auswählen"
       />
 
-      <Text style={styles.fieldLabel}>Transportart</Text>
-      <ChoiceRow
-        options={(Object.keys(typeLabels) as OrderType[]).map((value) => ({ value, label: typeLabels[value] }))}
-        selected={type}
-        onSelect={setType}
+      <Text style={styles.fieldLabel}>Chauffeur</Text>
+      <Dropdown
+        options={activeDrivers.map((driver) => ({ value: driver.id, label: `${driver.personnelNumber ? `${driver.personnelNumber} · ` : ''}${driver.name}` }))}
+        selected={driverId}
+        onSelect={(value) => {
+          setDriverId(value);
+          const assignment = defaultAssignmentForDriver(activeDrivers.find((driver) => driver.id === value));
+          setVehicleId(assignment.vehicleId && activeVehicles.some((item) => item.id === assignment.vehicleId) ? assignment.vehicleId : activeVehicles[0]?.id ?? '');
+          setTrailerId(assignment.trailerId && activeTrailers.some((item) => item.id === assignment.trailerId) ? assignment.trailerId : 'none');
+        }}
+      />
+
+      <Text style={styles.fieldLabel}>LKW</Text>
+      <Dropdown
+        options={activeVehicles.map((vehicle) => ({
+          value: vehicle.id,
+          label: vehicle.internalNumber,
+        }))}
+        selected={vehicleId}
+        onSelect={setVehicleId}
+      />
+
+      <Text style={styles.fieldLabel}>Anhänger / Auflieger</Text>
+      <Dropdown
+        options={[
+          { value: 'none', label: 'Ohne Anhänger / Auflieger' },
+          ...activeTrailers.map((trailer) => ({
+            value: trailer.id,
+            label: trailer.internalNumber,
+          })),
+        ]}
+        selected={trailerId}
+        onSelect={setTrailerId}
       />
 
       <View style={styles.formGrid}>
@@ -673,44 +707,9 @@ function OrderForm({
         onChangeText={setDescription}
       />
 
-      <Text style={styles.fieldLabel}>Chauffeur</Text>
-      <Dropdown
-        options={activeDrivers.map((driver) => ({ value: driver.id, label: `${driver.personnelNumber ? `${driver.personnelNumber} · ` : ''}${driver.name}` }))}
-        selected={driverId}
-        onSelect={(value) => {
-          setDriverId(value);
-          const assignment = defaultAssignmentForDriver(activeDrivers.find((driver) => driver.id === value));
-          setVehicleId(assignment.vehicleId && activeVehicles.some((item) => item.id === assignment.vehicleId) ? assignment.vehicleId : activeVehicles[0]?.id ?? '');
-          setTrailerId(assignment.trailerId && activeTrailers.some((item) => item.id === assignment.trailerId) ? assignment.trailerId : 'none');
-        }}
-      />
-
-      <Text style={styles.fieldLabel}>LKW</Text>
-      <Dropdown
-        options={activeVehicles.map((vehicle) => ({
-          value: vehicle.id,
-          label: vehicle.internalNumber,
-        }))}
-        selected={vehicleId}
-        onSelect={setVehicleId}
-      />
-
-      <Text style={styles.fieldLabel}>Anhänger / Auflieger</Text>
-      <Dropdown
-        options={[
-          { value: 'none', label: 'Ohne Anhänger' },
-          ...activeTrailers.map((trailer) => ({
-            value: trailer.id,
-            label: trailer.internalNumber,
-          })),
-        ]}
-        selected={trailerId}
-        onSelect={setTrailerId}
-      />
-
       <Text style={styles.fieldLabel}>Verrechnung</Text>
       <ChoiceRow
-        options={(Object.keys(billingLabels) as BillingMode[]).map((value) => ({
+        options={selectableBillingModes.map((value) => ({
           value,
           label: billingLabels[value],
         }))}
@@ -1455,9 +1454,6 @@ export default function App() {
               <Pressable onPress={() => setScreen('newOrder')} style={[styles.navButton, screen === 'newOrder' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'newOrder' && styles.navTextActive]}>Auftrag erfassen</Text>
               </Pressable>
-              <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
-                <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
-              </Pressable>
               <Pressable onPress={() => setScreen('absences')} style={[styles.navButton, screen === 'absences' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'absences' && styles.navTextActive]}>Abwesenheiten</Text>
               </Pressable>
@@ -1466,6 +1462,9 @@ export default function App() {
               </Pressable>
               <Pressable onPress={() => setScreen('billing')} style={[styles.navButton, screen === 'billing' && styles.navButtonActive]}>
                 <Text style={[styles.navText, screen === 'billing' && styles.navTextActive]}>Verrechnung</Text>
+              </Pressable>
+              <Pressable onPress={() => setScreen('masterData')} style={[styles.navButton, screen === 'masterData' && styles.navButtonActive]}>
+                <Text style={[styles.navText, screen === 'masterData' && styles.navTextActive]}>Stammdaten</Text>
               </Pressable>
             </View>
           )}

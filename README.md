@@ -8,11 +8,10 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Dispositionskalender mit Demoaufträgen
 - vollständig bedienbare Auftragserfassung
 - separate Google-Maps-Links für Ladeort und Abladeort
-- Zuteilung von Kunde/Projekt, Transportart, Chauffeur, LKW und Anhänger
+- Zuteilung von Kunde/Projekt, Chauffeur, LKW und Anhänger/Auflieger
 - flexible Auswahl der Verrechnungsart
 - neue Aufträge erscheinen sofort im Kalender
 - Stammdatenverwaltung für Kunden, Mitarbeitende, LKW, Anhänger und Benutzer
-- Transportarten Kipper, Kran und Tieflader als erste Beispiele
 - getrennte Zuteilung von Chauffeur, LKW und Anhänger
 - Auftragsstatus vom Eingang bis zur Verrechnung
 - geführter Chauffeur-Ablauf mit Navigation zum nächsten Ziel
@@ -23,7 +22,17 @@ Lauffähiger Projektstand für das Dispositions- und Transportmanagementsystem d
 - Fachkonzept und Zielarchitektur
 - automatisierte Tests der Verrechnungslogik
 
-Dies ist Version **0.22.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+Dies ist Version **0.23.0**. Die Rohner-Supabase-Datenbank ist für den lokalen Start und den GitHub-Pages-Build vorkonfiguriert. Daten werden zentral und dauerhaft gespeichert.
+
+Neu in Version 0.23.0:
+
+- Transportart aus der Auftragserfassung entfernt
+- Chauffeur, LKW und Anhänger/Auflieger zwischen Projekt und Datum verschoben
+- Standardgespann des ausgewählten Chauffeurs bleibt automatisch vorgewählt und weiterhin änderbar
+- neue Aufträge erhalten keine versteckte Standard-Transportart mehr
+- Verrechnungsarten «Pro Kilometer» und «Kombiniert» aus der Erfassung entfernt
+- Adminnavigation neu geordnet: Kalender, Auftrag erfassen, Abwesenheiten, Reparaturen, Verrechnung, Stammdaten
+- bestehende ältere Aufträge mit bisherigen Transport- oder Verrechnungsarten bleiben kompatibel
 
 Neu in Version 0.22.0:
 

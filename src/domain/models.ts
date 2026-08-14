@@ -126,7 +126,8 @@ export interface Project {
 export interface TransportOrder {
   id: string;
   orderNumber: string;
-  type: OrderType;
+  /** Nur noch für bereits bestehende Aufträge aus früheren Versionen. */
+  type?: OrderType;
   status: OrderStatus;
   workflowStep: WorkflowStep;
   workflowEvents: WorkflowEvent[];
